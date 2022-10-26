@@ -1,7 +1,9 @@
 CFLAGS=-O2 -fPIC -Wall
 LDFLAGS=-shared -nostdlib
+CXXFLAGS=-O2 -fPIC -Wl,--no-undefined -shared -g
+CXX=g++
 
-TARGET=libnvram.so libnvram_ioctl.so
+TARGET=libnvram.so libnvram_ioctl.so libvsockify.so
 
 all: $(SOURCES) $(TARGET)
 
@@ -16,6 +18,9 @@ libnvram_ioctl.so: nvram_ioctl.o
 
 nvram_ioctl.o: nvram.c
 	$(CC) -c $(CFLAGS) -DFIRMAE_KERNEL $< -o $@
+
+libvsockify.so: libvsockify.cpp
+	$(CXX) $(CXXFLAGS)  -o $@ $^ -ldl -D_GNU_SOURCE
 
 clean:
 	rm -f *.o libnvram.so libnvram_ioctl.so
