@@ -1,9 +1,15 @@
+CC=gcc
 CFLAGS=-O2 -fPIC -Wall
 LDFLAGS=-shared -nostdlib
-CXXFLAGS=-O2 -fPIC -Wl,--no-undefined -shared -g
+
 CXX=g++
+CXXFLAGS=-O2 -fPIC -Wall -Wl,--no-undefined -g -D_GNU_SOURCE
+#LXXFLAGS=-ldl -shared
+LXXFLAGS=-shared -nostdlib
 
 TARGET=libnvram.so libnvram_ioctl.so libvsockify.so
+
+# /opt/cross/mips-linux-uclibc/mips-linux-uclibc/
 
 all: $(SOURCES) $(TARGET)
 
@@ -20,9 +26,9 @@ nvram_ioctl.o: nvram.c
 	$(CC) -c $(CFLAGS) -DFIRMAE_KERNEL $< -o $@
 
 libvsockify.so: libvsockify.cpp
-	$(CXX) $(CXXFLAGS)  -o $@ $^ -ldl -D_GNU_SOURCE
+	$(CXX) $(CXXFLAGS)  -o $@ $^ $(LXXFLAGS)
 
 clean:
-	rm -f *.o libnvram.so libnvram_ioctl.so
+	rm -f *.o libnvram.so libnvram_ioctl.so libvsockify.so
 
 .PHONY: clean

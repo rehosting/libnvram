@@ -7,6 +7,10 @@
 #include <errno.h>
 #include <map>
 
+#if defined(mips) || defined(__mips__) || defined(__mips)
+#define AF_VSOCK 40
+#endif
+
 #define CID 4 // What CID do we bind on? Can we do this via an env variable?
 //#define TEST_INET // For testing. if enabled, bind a second INET port instead of a VSOCK
 #define FD_OFFSET 100 // When guest makes a new socket, we want to keep the original FD somewhere,
@@ -50,6 +54,10 @@
 // listen: if it's ours, listen on the VSOCK, not the INET
 // poll: if it's ours, listen on the VSOCK
 // accept/accept4: if it's ours
+
+__typeof__(dlsym) __attribute__((dlsym)) dlsym;
+__typeof__(printf) __attribute__((printf)) printf;
+
 
 std::map<int, int> v2i; // vsock to INET file descriptor mapping
 std::map<int, int> l2v; // accepted fd ("listening" then got dat) mapped to vsock
@@ -211,9 +219,10 @@ int shutdown(int sockfd, int how) {
     // Cleanup our state. Drop from v2i, and any stale references in l2v.
     v2i.erase(sockfd);
     // Note we don't need to close these ourself, that's somethign the kernel should handle
-    for (auto it : l2v) { 
-      if (it.second == sockfd) { 
-        l2v.erase(it.first);
+    std::map<int, int>::iterator it;
+    for (it = l2v.begin(); it != v2i.end(); it++) {
+      if (it->second == sockfd) { 
+        l2v.erase(it->first);
       } 
     }
   }
@@ -272,10 +281,10 @@ int getpeername(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
 
 // Guest should never get to listen on the original FD if we changed it. Just a sanity check
 int listen(int sockfd, int backlog) {
-  std::map<int, int>::iterator org_fd_iter = v2i.find(sockfd);
-  for (auto &it : v2i) { 
-    if (it.second == sockfd) { 
-      printf("VSOCKIFY ERROR: Guest listens on INET FD %d instead of our FD %d\n", sockfd, it.first);
+  std::map<int, int>::iterator org_fd_iter;// = v2i.find(sockfd);
+  for (org_fd_iter = v2i.begin(); org_fd_iter != v2i.end(); org_fd_iter++) {
+    if (org_fd_iter->second == sockfd) { 
+      printf("VSOCKIFY ERROR: Guest listens on INET FD %d instead of our FD %d\n", sockfd, org_fd_iter->first);
       return -EBADF;
     } 
   }
