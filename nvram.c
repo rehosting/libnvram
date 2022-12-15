@@ -12,8 +12,11 @@
 #include <sys/sem.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/file.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 #include <mntent.h>
+#include <fcntl.h>
 
 #include "alias.h"
 #include "nvram.h"
@@ -41,7 +44,6 @@
 #define PRINT_MSG(fmt, ...) do { if (DEBUG) { fprintf(stderr, "%s: "fmt, __FUNCTION__, __VA_ARGS__); } } while (0)
 
 /* Weak symbol definitions for library functions that may not be present */
-__typeof__(ftok) __attribute__((weak)) ftok;
 __typeof__(setmntent) __attribute__((weak)) setmntent;
 
 /* Global variables */
@@ -58,144 +60,46 @@ static void firmae_load_env()
     is_load_env = 1;
 }
 
-static int sem_get() {
-    int key, semid = 0;
-    unsigned int timeout = 0;
-    struct semid_ds seminfo;
-    union semun {
-        int val;
-        struct semid_ds *buf;
-        unsigned short *array;
-        struct seminfo *__buf;
-    } semun;
-    struct sembuf sembuf = {
-        .sem_num = 0,
-        .sem_op = 1,
-        .sem_flg = 0,
-    };
-
-    // Generate key for semaphore based on the mount point
-    if (!ftok || (key = ftok(MOUNT_POINT, IPC_KEY)) == -1) {
-        //PRINT_MSG("%s ftok %d, key %d\n", "Unable to get semaphore key! Utilize altenative key.. by SR.");
-        key = 246812345; // Hardcoded random value
-    }
-
-    //PRINT_MSG("Key: %x\n", key);
-
-    // Get the semaphore using the key
-    if ((semid = semget(key, 1, IPC_CREAT | IPC_EXCL | 0666)) >= 0) {
-        semun.val = 1;
-        // Unlock the semaphore and set the sem_otime field
-        if (semop(semid, &sembuf, 1) == -1) {
-            PRINT_MSG("%s\n", "Unable to initialize semaphore!");
-            // Clean up semaphore
-            semctl(semid, 0, IPC_RMID);
-            semid = -1;
-        }
-    }
-    else if (errno == EEXIST) {
-        // Get the semaphore in non-exclusive mode
-        if ((semid = semget(key, 1, 0)) < 0) {
-            PRINT_MSG("%s\n", "Unable to get semaphore non-exclusively!");
-            return semid;
-        }
-
-        semun.buf = &seminfo;
-        // Wait for the semaphore to be initialized
-        while (timeout++ < IPC_TIMEOUT) {
-            semctl(semid, 0, IPC_STAT, semun);
-
-            if (semun.buf && semun.buf->sem_otime != 0) {
-                break;
-            }
-        }
-        if  (timeout >= IPC_TIMEOUT)
-            PRINT_MSG("Waiting for semaphore timeout (Key: %x, Semaphore: %x)...\n", key, semid);
-    }
-
-    return (timeout < IPC_TIMEOUT) ? semid : -1;
-}
-
-static void sem_lock() {
-    int semid;
-    struct sembuf sembuf = {
-        .sem_num = 0,
-        .sem_op = -1,
-        .sem_flg = SEM_UNDO,
-    };
-    struct mntent entry, *ent;
-    FILE *mnt = NULL;
-
+static int dir_lock() {
+    int dirfd;
     // If not initialized, check for existing mount before triggering NVRAM init
     if (!init) {
-        if (setmntent) {
-            if ((mnt = setmntent("/proc/mounts", "r"))) {
-              while ((ent = getmntent_r(mnt, &entry, temp, BUFFER_SIZE))) {
-                  if (!strncmp(ent->mnt_dir, MOUNT_POINT, sizeof(MOUNT_POINT) - 2)) {
-                      init = 1;
-                      PRINT_MSG("%s\n", "Already initialized!");
-                      endmntent(mnt);
-                      goto cont;
-                  }
-              }
-              endmntent(mnt);
-            }
-        } else {
-          // setmntent is unavailable, when we mount we'll touch /mounted in the directory as a flag
-          FILE *f;
-          if ((f = fopen(MOUNT_POINT "/mounted", "rb")) != NULL) {
+        //when we initialize we touch /mounted in the directory as a flag
+        FILE *f;
+        if ((f = fopen(MOUNT_POINT "/mounted", "rb")) != NULL) {
             fclose(f);
             // We were able to open MOUNT_POINT/mounted  - we probably mounted this previously, bail
             goto cont;
-          }
-          PRINT_MSG("%s\n", "setmntent is unavailable and no MOUNT_POINT/mounted - do nvram init");
         }
-
 
         PRINT_MSG("%s\n", "Triggering NVRAM initialization!");
         nvram_init();
     }
 
 cont:
-    // Must get sempahore after NVRAM initialization, mounting will change ID
-    if ((semid = sem_get()) == -1) {
-        PRINT_MSG("%s\n", "Unable to get semaphore!");
-        return;
+    dirfd = open(MOUNT_POINT, O_DIRECTORY | O_RDONLY);
+    if(dirfd < 0) {
+       PRINT_MSG("Couldn't open %s\n", MOUNT_POINT);
     }
-
-//    PRINT_MSG("%s\n", "Locking semaphore...");
-
-    if (semop(semid, &sembuf, 1) == -1) {
-        PRINT_MSG("%s\n", "Unable to lock semaphore!");
+    //if(_syscall2(int,sysflock,int,dirfd,int,LOCK_EX) < 0) {
+    if(flock_asm(dirfd,LOCK_EX) < 0) {
+       PRINT_MSG("Couldn't lock %s\n", MOUNT_POINT);
     }
-
-    return;
+    return dirfd;
 }
 
-static void sem_unlock() {
-    int semid;
-    struct sembuf sembuf = {
-        .sem_num = 0,
-        .sem_op = 1,
-        .sem_flg = SEM_UNDO,
-    };
-
-    if ((semid = sem_get(NULL)) == -1) {
-        PRINT_MSG("%s\n", "Unable to get semaphore!");
-        return;
+static void dir_unlock(int dirfd) {
+    //if(_syscall2(int,sysflock,int,dirfd,int,LOCK_UN) < 0) {
+    if(flock_asm(dirfd,LOCK_UN) < 0) {
+       PRINT_MSG("Couldn't unlock %s\n", MOUNT_POINT);
     }
-
-//    PRINT_MSG("%s\n", "Unlocking semaphore...");
-
-    if (semop(semid, &sembuf, 1) == -1) {
-        PRINT_MSG("%s\n", "Unable to unlock semaphore!");
-    }
-
+    close(dirfd);
     return;
 }
 
 int nvram_init(void) {
     FILE *f;
+    int dirfd;
 
     PRINT_MSG("%s\n", "Initializing NVRAM...");
 
@@ -205,19 +109,17 @@ int nvram_init(void) {
     }
     init = 1;
 
-    sem_lock();
+    dirfd = dir_lock();
 
     if (mount("tmpfs", MOUNT_POINT, "tmpfs", MS_NOEXEC | MS_NOSUID | MS_SYNCHRONOUS, "") == -1) {
-        sem_unlock();
+        dir_unlock(dirfd);
         PRINT_MSG("Unable to mount tmpfs on mount point %s!\n", MOUNT_POINT);
         return E_FAILURE;
     }
 
     // Touch /mounted so we know it exists if we don't have semset
-    if (!setmntent) {
-      if ((f = fopen(MOUNT_POINT "/mounted", "w+")) == NULL) {
-          PRINT_MSG("%s\n", "Unable open mount_point/mounted");
-      }
+    if ((f = fopen(MOUNT_POINT "/mounted", "w+")) == NULL) {
+        PRINT_MSG("%s\n", "Unable open mount_point/mounted");
     }
 
     // Checked by certain Ralink routers
@@ -228,7 +130,7 @@ int nvram_init(void) {
         fclose(f);
     }
 
-    sem_unlock();
+    dir_unlock(dirfd);
 
     return nvram_set_default();
 }
@@ -249,13 +151,14 @@ int nvram_clear(void) {
     struct dirent *entry;
     int ret = E_SUCCESS;
     DIR *dir;
+    int dirfd;
 
     PRINT_MSG("%s\n", "Clearing NVRAM...");
 
-    sem_lock();
+    dirfd = dir_lock();
 
     if (!(dir = opendir(MOUNT_POINT))) {
-        sem_unlock();
+        dir_unlock(dirfd);
         PRINT_MSG("Unable to open directory %s!\n", MOUNT_POINT);
         return E_FAILURE;
     }
@@ -278,7 +181,7 @@ int nvram_clear(void) {
     }
 
     closedir(dir);
-    sem_unlock();
+    dir_unlock(dirfd);
     return ret;
 }
 
@@ -403,6 +306,7 @@ char *nvram_default_get(const char *key, const char *val) {
 int nvram_get_buf(const char *key, char *buf, size_t sz) {
     char path[PATH_MAX] = MOUNT_POINT;
     FILE *f;
+    int dirfd;
     if (!is_load_env) firmae_load_env();
 
     if (!buf) {
@@ -422,10 +326,10 @@ int nvram_get_buf(const char *key, char *buf, size_t sz) {
 
     strncat(path, key, ARRAY_SIZE(path) - ARRAY_SIZE(MOUNT_POINT) - 1);
 
-    sem_lock();
+    dirfd = dir_lock();
 
     if ((f = fopen(path, "rb")) == NULL) {
-        sem_unlock();
+        dir_unlock(dirfd);
         PRINT_MSG("Unable to open key: %s! Set default value to \"\"\n", path);
         if (firmae_nvram)
         {
@@ -450,7 +354,7 @@ int nvram_get_buf(const char *key, char *buf, size_t sz) {
     }
 
     fclose(f);
-    sem_unlock();
+    dir_unlock(dirfd);
 
     PRINT_MSG("= \"%s\"\n", buf);
 
@@ -462,6 +366,7 @@ int nvram_get_int(const char *key) {
     FILE *f;
     char buf[32]; // Buffer to store ASCII representation of the integer
     int ret = 0;
+    int dirfd;
 
     if (!key) {
         PRINT_MSG("%s\n", "NULL key!");
@@ -472,11 +377,11 @@ int nvram_get_int(const char *key) {
 
     strncat(path, key, ARRAY_SIZE(path) - ARRAY_SIZE(MOUNT_POINT) - 1);
 
-    sem_lock();
+    dirfd = dir_lock();
 
     // Try to open the file
     if ((f = fopen(path, "rb")) == NULL) {
-        sem_unlock();
+        dir_unlock(dirfd);
         PRINT_MSG("Unable to open key: %s!\n", path);
         return E_FAILURE;
     }
@@ -496,19 +401,19 @@ int nvram_get_int(const char *key) {
             if (fread(&ret, sizeof(ret), 1, f) != 1) {
                 PRINT_MSG("Unable to read key as binary int: %s!\n", path);
                 fclose(f);
-                sem_unlock();
+                dir_unlock(dirfd);
                 return E_FAILURE;
             }
         }
     } else {
-        PRINT_MSG("Unable to read key: %s!\n", path);
         fclose(f);
-        sem_unlock();
+        dir_unlock(dirfd);
+        PRINT_MSG("Unable to read key: %s!\n", path);
         return E_FAILURE;
     }
 
     fclose(f);
-    sem_unlock();
+    dir_unlock(dirfd);
 
     PRINT_MSG("= %d\n", ret);
 
@@ -521,16 +426,17 @@ int nvram_getall(char *buf, size_t len) {
     size_t pos = 0, ret;
     DIR *dir;
     FILE *f;
+    int dirfd;
 
     if (!buf || !len) {
         PRINT_MSG("%s\n", "NULL buffer or zero length!");
         return E_FAILURE;
     }
 
-    sem_lock();
+    dirfd = dir_lock();
 
     if (!(dir = opendir(MOUNT_POINT))) {
-        sem_unlock();
+        dir_unlock(dirfd);
         PRINT_MSG("Unable to open directory %s!\n", MOUNT_POINT);
         return E_FAILURE;
     }
@@ -545,7 +451,7 @@ int nvram_getall(char *buf, size_t len) {
 
         if ((ret = snprintf(buf + pos, len - pos, "%s=", entry->d_name)) != strlen(entry->d_name) + 1) {
             closedir(dir);
-            sem_unlock();
+            dir_unlock(dirfd);
             PRINT_MSG("Unable to append key %s!\n", buf + pos);
             return E_FAILURE;
         }
@@ -554,7 +460,7 @@ int nvram_getall(char *buf, size_t len) {
 
         if ((f = fopen(path, "rb")) == NULL) {
             closedir(dir);
-            sem_unlock();
+            dir_unlock(dirfd);
             PRINT_MSG("Unable to open key: %s!\n", path);
             return E_FAILURE;
         }
@@ -563,7 +469,7 @@ int nvram_getall(char *buf, size_t len) {
         if (ferror(f)) {
             fclose(f);
             closedir(dir);
-            sem_unlock();
+            dir_unlock(dirfd);
             PRINT_MSG("Unable to read key: %s!\n", path);
             return E_FAILURE;
         }
@@ -576,13 +482,14 @@ int nvram_getall(char *buf, size_t len) {
     }
 
     closedir(dir);
-    sem_unlock();
+    dir_unlock(dirfd);
     return E_SUCCESS;
 }
 
 int nvram_set(const char *key, const char *val) {
     char path[PATH_MAX] = MOUNT_POINT;
     FILE *f;
+    int dirfd;
 
     if (!key || !val) {
         PRINT_MSG("%s\n", "NULL key or value!");
@@ -593,29 +500,30 @@ int nvram_set(const char *key, const char *val) {
 
     strncat(path, key, ARRAY_SIZE(path) - ARRAY_SIZE(MOUNT_POINT) - 1);
 
-    sem_lock();
+    dirfd = dir_lock();
 
     if ((f = fopen(path, "wb")) == NULL) {
-        sem_unlock();
+        dir_unlock(dirfd);
         PRINT_MSG("Unable to open key: %s!\n", path);
         return E_FAILURE;
     }
 
     if (fwrite(val, sizeof(*val), strlen(val), f) != strlen(val)) {
         fclose(f);
-        sem_unlock();
+        dir_unlock(dirfd);
         PRINT_MSG("Unable to write value: %s to key: %s!\n", val, path);
         return E_FAILURE;
     }
 
     fclose(f);
-    sem_unlock();
+    dir_unlock(dirfd);
     return E_SUCCESS;
 }
 
 int nvram_set_int(const char *key, const int val) {
     char path[PATH_MAX] = MOUNT_POINT;
     FILE *f;
+    int dirfd;
 
     if (!key) {
         PRINT_MSG("%s\n", "NULL key!");
@@ -626,23 +534,23 @@ int nvram_set_int(const char *key, const int val) {
 
     strncat(path, key, ARRAY_SIZE(path) - ARRAY_SIZE(MOUNT_POINT) - 1);
 
-    sem_lock();
+    dirfd = dir_lock();
 
     if ((f = fopen(path, "wb")) == NULL) {
-        sem_unlock();
+        dir_unlock(dirfd);
         PRINT_MSG("Unable to open key: %s!\n", path);
         return E_FAILURE;
     }
 
     if (fwrite(&val, sizeof(val), 1, f) != 1) {
         fclose(f);
-        sem_unlock();
+        dir_unlock(dirfd);
         PRINT_MSG("Unable to write value: %d to key: %s!\n", val, path);
         return E_FAILURE;
     }
 
     fclose(f);
-    sem_unlock();
+    dir_unlock(dirfd);
     return E_SUCCESS;
 }
 
@@ -747,10 +655,11 @@ static int nvram_set_default_builtin(void) {
 }
 
 static int nvram_set_default_image(void) {
+    int dirfd;
     PRINT_MSG("%s\n", "Copying overrides from defaults folder!");
-    sem_lock();
+    dirfd = dir_lock();
     system("/bin/cp "OVERRIDE_POINT"* "MOUNT_POINT);
-    sem_unlock();
+    dir_unlock(dirfd);
     return E_SUCCESS;
 }
 
@@ -767,6 +676,7 @@ static int nvram_set_default_table(const char *tbl[]) {
 
 int nvram_unset(const char *key) {
     char path[PATH_MAX] = MOUNT_POINT;
+    int dirfd;
 
     if (!key) {
         PRINT_MSG("%s\n", "NULL key!");
@@ -777,13 +687,13 @@ int nvram_unset(const char *key) {
 
     strncat(path, key, ARRAY_SIZE(path) - ARRAY_SIZE(MOUNT_POINT) - 1);
 
-    sem_lock();
+    dirfd = dir_lock();
     if (unlink(path) == -1 && errno != ENOENT) {
-        sem_unlock();
+        dir_unlock(dirfd);
         PRINT_MSG("Unable to unlink %s!\n", path);
         return E_FAILURE;
     }
-    sem_unlock();
+    dir_unlock(dirfd);
     return E_SUCCESS;
 }
 
@@ -828,9 +738,10 @@ int nvram_invmatch(const char *key, const char *val) {
 }
 
 int nvram_commit(void) {
-    sem_lock();
+    int dirfd;
+    dirfd = dir_lock();
     sync();
-    sem_unlock();
+    dir_unlock(dirfd);
 
     return E_SUCCESS;
 }

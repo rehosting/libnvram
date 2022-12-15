@@ -1,12 +1,10 @@
 #ifndef INCLUDE_NVRAM_H
 #define INCLUDE_NVRAM_H
 
-// Gets the ID of the semaphore. If uninitialized, will initialize both the semaphore and NVRAM.
-static int sem_get();
-// Locks the binary semaphore. Will block.
-static void sem_lock();
-// Unlocks the binary semaphore.
-static void sem_unlock();
+// Locks the nvram directory. Will block.
+static int dir_lock();
+// Unlocks the nvram directory.
+static void dir_unlock(int dirfd);
 
 // Sets default NVRAM values using the built-in NVRAM_DEFAULTS table.
 static int nvram_set_default_builtin(void);
@@ -84,4 +82,27 @@ int agApi_fwGetFirstTriggerConf(char *a1);
 int agApi_fwGetNextTriggerConf(char *a1);
 #endif
 
+int flock_asm(int fd, int op) {
+    int retval;
+#if defined(__mips__)
+    asm volatile(
+        "move $a0, %1\n" 
+        "move $a1, %2\n" 
+        "move $v0, %0\n" 
+        "syscall\n"
+        "move %[result], $v0"
+        : [result]"=r" (retval) : "r"(SYS_flock), "r"(fd), "r"(op) : "v0", "a0", "a1"
+    );
+#elif defined(__arm__)
+    asm volatile(
+        "mov r0, %1\n" 
+        "mov r1, %2\n" 
+        "mov r7, %0\n" 
+        "swi 0x0\n"
+        "mov %[result], r0"
+        : [result]"=r" (retval) : "r"(SYS_flock), "r"(fd), "r"(op) : "r0", "r1", "r2", "r7"
+    );
+#endif
+    return retval;
+}
 #endif
