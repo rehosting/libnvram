@@ -1,5 +1,6 @@
-CFLAGS=-O2 -fPIC -Wall -Wno-attribute-alias
-LDFLAGS=-shared -nostdlib
+CF := -O2 -fPIC -Wall -Wno-attribute-alias
+CFLAGS :=
+LDFLAGS := -shared -nostdlib
 
 TARGET=libnvram.so libnvram_ioctl.so
 
@@ -12,10 +13,10 @@ libnvram_ioctl.so: nvram_ioctl.o
 	$(CC) $(LDFLAGS) $< -o $@
 
 .c.o:
-	$(CC) -c $(CFLAGS) $< -o $@
+	$(CC) -c $(CFLAGS) $(CF) $< -o $@
 
 nvram_ioctl.o: nvram.c
-	$(CC) -c $(CFLAGS) -DFIRMAE_KERNEL $< -o $@
+	$(CC) -c $(CFLAGS) $(CF) -DFIRMAE_KERNEL $< -o $@
 
 clean:
 	rm -f *.o libnvram.so libnvram_ioctl.so
