@@ -18,6 +18,7 @@
 #include "alias.h"
 #include "nvram.h"
 #include "config.h"
+#include "strings.h"
 
 /* Generate variable declarations for external NVRAM data. */
 #define NATIVE(a, b)
@@ -915,3 +916,4 @@ int agApi_fwGetNextTriggerConf(char *a1)
 
 // Hack to use static variables in shared library
 #include "alias.c"
+#include "strings.c"
