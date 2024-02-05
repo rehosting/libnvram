@@ -13,11 +13,11 @@ CC=arm-linux-musleabi-gcc make CFLAGS="-DCONFIG_ARM=1" libnvram.so -C /app
 mv libnvram.so $SCRATCH/libnvram.so.armel
 make clean
 
-CC=mipsel-linux-musl-gcc make CFLAGS="-DCONFIG_MIPS=1" libnvram.so -C /app
+CC=mipsel-linux-musl-gcc make CFLAGS="-DCONFIG_MIPS=1 -march=mips32r2" libnvram.so -C /app
 mv libnvram.so $SCRATCH/libnvram.so.mipsel
 make clean
 
-CC=mipseb-linux-musl-gcc make CFLAGS="-DCONFIG_MIPS=1" libnvram.so -C /app
+CC=mipseb-linux-musl-gcc make CFLAGS="-DCONFIG_MIPS=1 -march=mips32r2" libnvram.so -C /app
 mv libnvram.so $SCRATCH/libnvram.so.mipseb
 make clean
 
