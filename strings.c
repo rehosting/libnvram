@@ -28,11 +28,15 @@ void log_match(match m) {
             break;
     }
 
-    // TODO: we could support retries
-    igloo_hypercall2(cmd, (unsigned long)m.value, strlen(m.value));
+    int rv = igloo_hypercall2(cmd, (unsigned long)m.value, minimal_strlen(m.value));
+    while (rv == 1) {
+        // page in m.value
+        for (int i = 0; i < minimal_strlen(m.value); i++) {
+            if (!m.value[i]) break;
+        }
+        rv = igloo_hypercall2(cmd, (unsigned long)m.value, minimal_strlen(m.value));
+    }
 }
-
-
 
 // Simple string length calculation
 size_t minimal_strlen(const char *s) {
@@ -113,7 +117,20 @@ char *strstr(const char *haystack, const char *needle) {
 
     // It's not actually a match - strstr is a bit more
     // involved so we just pass the args out every time
-    igloo_hypercall2(104, (unsigned long)haystack, (unsigned long)needle);
+    int rv = igloo_hypercall2(104, (unsigned long)haystack, (unsigned long)needle);
+
+    // Hypercall returns -1 on read fail. If no hypercall is available we'd get a different reval
+    // so we wouldn't infinite loop. Hopefully.
+    while (rv == 1) {
+        // Read through both buffers to page them in
+        for (int i = 0; i < minimal_strlen(haystack); i++) {
+            if (!haystack[i]) break;
+        }
+        for (int i = 0; i < minimal_strlen(needle); i++) {
+            if (!needle[i]) break;
+        }
+        rv = igloo_hypercall2(104, (unsigned long)haystack, (unsigned long)needle);
+    }
 
     for (; *haystack; ++haystack) {
         const char *h = haystack;
