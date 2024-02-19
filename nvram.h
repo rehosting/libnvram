@@ -86,22 +86,26 @@ int flock_asm(int fd, int op) {
     int retval;
 #if defined(__mips__)
     asm volatile(
-        "move $a0, %1\n" 
-        "move $a1, %2\n" 
-        "move $v0, %0\n" 
-        "syscall\n"
-        "move %[result], $v0"
-        : [result]"=r" (retval) : "r"(SYS_flock), "r"(fd), "r"(op) : "v0", "a0", "a1"
-    );
+    "move $a0, %1\n"        // Correctly move fd (from C variable) to $a0
+    "move $a1, %2\n"        // Correctly move op (from C variable) to $a1
+    "li $v0, %3\n"          // Load the syscall number for flock into $v0
+    "syscall\n"             // Perform the syscall
+    "move %0, $v0"          // Move the result from $v0 to retval
+    : "=r" (retval)         // Output
+    : "r" (fd), "r" (op), "i" (SYS_flock) // Inputs; "i" for immediate syscall number
+    : "v0", "a0", "a1"      // Clobber list
+);
 #elif defined(__arm__)
     asm volatile(
-        "mov r0, %1\n" 
-        "mov r1, %2\n" 
-        "mov r7, %0\n" 
-        "swi 0x0\n"
-        "mov %[result], r0"
-        : [result]"=r" (retval) : "r"(SYS_flock), "r"(fd), "r"(op) : "r0", "r1", "r2", "r7"
-    );
+    "mov r0, %1\n"  // Move fd to r0, the first argument for the system call
+    "mov r1, %2\n"  // Move op to r1, the second argument for the system call
+    "mov r7, %3\n"  // Move SYS_flock (the system call number) to r7
+    "svc 0x00000000\n"  // Make the system call
+    "mov %[result], r0"  // Move the result from r0 to retval
+    : [result]"=r" (retval)  // Output
+    : "r"(fd), "r"(op), "i"(SYS_flock)  // Inputs
+    : "r0", "r1", "r7"  // Clobber list
+);
 #endif
     return retval;
 }
