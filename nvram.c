@@ -10,7 +10,6 @@
 #include <sys/ipc.h>
 #include <sys/mount.h>
 #include <sys/sem.h>
-#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/file.h>
 #include <sys/syscall.h>
@@ -60,15 +59,57 @@ static void firmae_load_env()
     is_load_env = 1;
 }
 
+int has_empty_marker() {
+    // Use raw syscall to avoid __stat_time64 library dependency
+    if (syscall(SYS_access, EMPTY_PATH, F_OK) == -1) {
+        return E_FAILURE; // No file
+    }
+    return E_SUCCESS; // Yes file
+}
+
+int remove_empty_marker() {
+    if (unlink(EMPTY_PATH) == -1) {
+        PRINT_MSG("Unable to remove %s!\n", EMPTY_PATH);
+        return E_FAILURE;
+    }
+    return E_SUCCESS;
+}
+
+int add_empty_marker_if_necessary() {
+    // Call with a lock held. If the directory is empty, add the .empty marker
+
+    struct dirent *entry;
+    DIR *dir;
+    if (!(dir = opendir(MOUNT_POINT))) {
+        PRINT_MSG("Unable to open directory when checking if empty %s!\n", MOUNT_POINT);
+        return E_FAILURE; // We can't check if the directory is empty
+    }
+
+    while ((entry = readdir(dir))) {
+        if (strlen(entry->d_name) > 2 && entry->d_name[0] != '.') {
+            closedir(dir);
+            return E_SUCCESS;
+        }
+    }
+
+    // If we get here, the directory is empty - mark it as such
+    if (creat(EMPTY_PATH, 0666) == -1) {
+        PRINT_MSG("Unable to create %s!\n", EMPTY_PATH);
+        closedir(dir);
+        return E_FAILURE; // We can't mark the directory as empty
+    }
+    return E_SUCCESS;
+}
+
 static int dir_lock() {
     int dirfd;
     // If not initialized, check for existing mount before triggering NVRAM init
     if (!init) {
-        //when we initialize we touch /mounted in the directory as a flag
+        //when we initialize we touch /.mounted in the directory as a flag
         FILE *f;
-        if ((f = fopen(MOUNT_POINT "/mounted", "rb")) != NULL) {
+        if ((f = fopen(MOUNT_POINT "/.mounted", "rb")) != NULL) {
             fclose(f);
-            // We were able to open MOUNT_POINT/mounted  - we probably mounted this previously, bail
+            // We were able to open MOUNT_POINT/.mounted  - we probably mounted this previously, bail
             goto cont;
         }
 
@@ -118,8 +159,8 @@ int nvram_init(void) {
     }
 
     // Touch /mounted so we know it exists if we don't have semset
-    if ((f = fopen(MOUNT_POINT "/mounted", "w+")) == NULL) {
-        PRINT_MSG("%s\n", "Unable open mount_point/mounted");
+    if ((f = fopen(MOUNT_POINT "/.mounted", "w+")) == NULL) {
+        PRINT_MSG("%s\n", "Unable open mount_point/.mounted");
     }
 
     // Checked by certain Ralink routers
@@ -326,6 +367,22 @@ int nvram_get_buf(const char *key, char *buf, size_t sz) {
 
     strncat(path, key, ARRAY_SIZE(path) - ARRAY_SIZE(MOUNT_POINT) - 1);
 
+    if (has_empty_marker()) {
+        // No need to take lock, key is unset
+        // Duplicated from below after unlock
+        PRINT_MSG("Unable to open key: %s! Set default value to \"\"\n", path);
+        if (firmae_nvram)
+        {
+            //If key value is not found, make the default value to ""
+            if (!strcmp(key, "noinitrc"))
+                return E_FAILURE;
+            strcpy(buf,"");
+            return E_SUCCESS;
+        }
+        else
+            return E_FAILURE;
+    }
+
     dirfd = dir_lock();
 
     if ((f = fopen(path, "rb")) == NULL) {
@@ -376,6 +433,12 @@ int nvram_get_int(const char *key) {
     PRINT_MSG("%s\n", key);
 
     strncat(path, key, ARRAY_SIZE(path) - ARRAY_SIZE(MOUNT_POINT) - 1);
+
+    if (has_empty_marker()) {
+        // No need to take lock, key is unset
+        PRINT_MSG("Unable to open key: %s!\n", path);
+        return E_FAILURE;
+    }
 
     dirfd = dir_lock();
 
@@ -442,7 +505,8 @@ int nvram_getall(char *buf, size_t len) {
     }
 
     while ((entry = readdir(dir))) {
-        if (!strncmp(entry->d_name, ".", 1) || !strcmp(entry->d_name, "..")) {
+        if (!strncmp(entry->d_name, ".", 1) || !strcmp(entry->d_name, "..") ||
+            !strcmp(entry->d_name, ".mounted") || !strcmp(entry->d_name, ".empty")) {
             continue;
         }
 
@@ -490,6 +554,7 @@ int nvram_set(const char *key, const char *val) {
     char path[PATH_MAX] = MOUNT_POINT;
     FILE *f;
     int dirfd;
+    int was_empty;
 
     if (!key || !val) {
         PRINT_MSG("%s\n", "NULL key or value!");
@@ -501,6 +566,7 @@ int nvram_set(const char *key, const char *val) {
     strncat(path, key, ARRAY_SIZE(path) - ARRAY_SIZE(MOUNT_POINT) - 1);
 
     dirfd = dir_lock();
+    was_empty = has_empty_marker();
 
     if ((f = fopen(path, "wb")) == NULL) {
         dir_unlock(dirfd);
@@ -516,6 +582,12 @@ int nvram_set(const char *key, const char *val) {
     }
 
     fclose(f);
+
+    // We just wrote a new entry - it *can't* be empty now
+    // If it was before, remove the empty marker
+    if (was_empty) {
+        remove_empty_marker();
+    }
     dir_unlock(dirfd);
     return E_SUCCESS;
 }
@@ -524,6 +596,7 @@ int nvram_set_int(const char *key, const int val) {
     char path[PATH_MAX] = MOUNT_POINT;
     FILE *f;
     int dirfd;
+    int was_empty;
 
     if (!key) {
         PRINT_MSG("%s\n", "NULL key!");
@@ -535,6 +608,7 @@ int nvram_set_int(const char *key, const int val) {
     strncat(path, key, ARRAY_SIZE(path) - ARRAY_SIZE(MOUNT_POINT) - 1);
 
     dirfd = dir_lock();
+    was_empty = has_empty_marker();
 
     if ((f = fopen(path, "wb")) == NULL) {
         dir_unlock(dirfd);
@@ -550,6 +624,12 @@ int nvram_set_int(const char *key, const int val) {
     }
 
     fclose(f);
+
+    // We just wrote a new entry - it *can't* be empty now
+    // If it was before, remove the empty marker
+    if (was_empty) {
+        remove_empty_marker();
+    }
     dir_unlock(dirfd);
     return E_SUCCESS;
 }
@@ -655,11 +735,11 @@ static int nvram_set_default_builtin(void) {
 }
 
 static int nvram_set_default_image(void) {
-    int dirfd;
-    PRINT_MSG("%s\n", "Copying overrides from defaults folder!");
-    dirfd = dir_lock();
-    system("/bin/cp "OVERRIDE_POINT"* "MOUNT_POINT);
-    dir_unlock(dirfd);
+    //int dirfd;
+    //PRINT_MSG("%s\n", "Copying overrides from defaults folder!");
+    //dirfd = dir_lock();
+    //system("/bin/cp "OVERRIDE_POINT"* "MOUNT_POINT);
+    //dir_unlock(dirfd);
     return E_SUCCESS;
 }
 
@@ -685,14 +765,31 @@ int nvram_unset(const char *key) {
 
     PRINT_MSG("%s\n", key);
 
+    // Optimistic pre-check - if .empty is present, we'll bail without
+    // acquiring the lock or unlinking
+    if (has_empty_marker()) {
+        return E_SUCCESS;
+    }
+
     strncat(path, key, ARRAY_SIZE(path) - ARRAY_SIZE(MOUNT_POINT) - 1);
 
     dirfd = dir_lock();
+
+    // Re-check if .empty is present after acquiring the lock
+    if (has_empty_marker()) {
+        // Someone else just emptied. Unlikely but possible
+        dir_unlock(dirfd);
+        return E_SUCCESS;
+    }
+
     if (unlink(path) == -1 && errno != ENOENT) {
         dir_unlock(dirfd);
         PRINT_MSG("Unable to unlink %s!\n", path);
         return E_FAILURE;
     }
+
+    // Directory could now be empty, remove marker if necessary
+    add_empty_marker_if_necessary();
     dir_unlock(dirfd);
     return E_SUCCESS;
 }

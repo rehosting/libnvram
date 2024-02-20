@@ -21,6 +21,7 @@
 #define MOUNT_POINT         "/firmadyne/libnvram/"
 // Location of NVRAM override values that are copied into the base NVRAM implementation.
 #define OVERRIDE_POINT      "/firmadyne/libnvram.override/"
+#define EMPTY_PATH         MOUNT_POINT ".empty"
 
 // Define the semantics for success and failure error codes.
 #define E_FAILURE  0
