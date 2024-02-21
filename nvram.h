@@ -6,8 +6,6 @@ static int dir_lock();
 // Unlocks the nvram directory.
 static void dir_unlock(int dirfd);
 
-// Sets default NVRAM values using the override values from OVERRIDE_POINT. Will hold lock.
-static int nvram_set_default_image(void);
 // Sets default NVRAM values from external table defined in NVRAM_DEFAULTS_PATH.
 static int nvram_set_default_table(const char *tbl[]);
 

@@ -18,9 +18,7 @@
 // Timeout for the semaphore
 #define IPC_TIMEOUT         1000
 // Mount point of the base NVRAM implementation.
-#define MOUNT_POINT         "/firmadyne/libnvram/"
-// Location of NVRAM override values that are copied into the base NVRAM implementation.
-#define OVERRIDE_POINT      "/firmadyne/libnvram.override/"
+#define MOUNT_POINT         "/igloo/libnvram_tmpfs/"
 
 // Define the semantics for success and failure error codes.
 #define E_FAILURE  0
