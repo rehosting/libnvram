@@ -53,19 +53,10 @@ static int dir_lock() {
     int dirfd;
     // If not initialized, check for existing mount before triggering NVRAM init
     if (!init) {
-        //when we initialize we touch /mounted in the directory as a flag
-        FILE *f;
-        if ((f = fopen(MOUNT_POINT "/mounted", "rb")) != NULL) {
-            fclose(f);
-            // We were able to open MOUNT_POINT/mounted  - we probably mounted this previously, bail
-            goto cont;
-        }
-
         PRINT_MSG("%s\n", "Triggering NVRAM initialization!");
         nvram_init();
     }
 
-cont:
     dirfd = open(MOUNT_POINT, O_DIRECTORY | O_RDONLY);
     if(dirfd < 0) {
        PRINT_MSG("Couldn't open %s\n", MOUNT_POINT);
@@ -87,40 +78,7 @@ static void dir_unlock(int dirfd) {
 }
 
 int nvram_init(void) {
-    FILE *f;
-    int dirfd;
-
-    PRINT_MSG("%s\n", "Initializing NVRAM...");
-
-    if (init) {
-        PRINT_MSG("%s\n", "Early termination!");
-        return E_SUCCESS;
-    }
     init = 1;
-
-    dirfd = dir_lock();
-
-    if (mount("tmpfs", MOUNT_POINT, "tmpfs", MS_NOEXEC | MS_NOSUID | MS_SYNCHRONOUS, "") == -1) {
-        dir_unlock(dirfd);
-        PRINT_MSG("Unable to mount tmpfs on mount point %s!\n", MOUNT_POINT);
-        return E_FAILURE;
-    }
-
-    // Touch /mounted so we know it exists if we don't have semset
-    if ((f = fopen(MOUNT_POINT "/mounted", "w+")) == NULL) {
-        PRINT_MSG("%s\n", "Unable open mount_point/mounted");
-    }
-
-    // Checked by certain Ralink routers
-    if ((f = fopen("/var/run/nvramd.pid", "w+")) == NULL) {
-        PRINT_MSG("Unable to touch Ralink PID file: %s!\n", "/var/run/nvramd.pid");
-    }
-    else {
-        fclose(f);
-    }
-
-    dir_unlock(dirfd);
-
     return nvram_set_default();
 }
 
@@ -552,15 +510,6 @@ int nvram_set_default(void) {
     if (Nvrams) {
         PRINT_MSG("Loading from native built-in table: %s (%p) = %d!\n", "Nvrams", Nvrams, nvram_set_default_table(Nvrams));
     }
-    return nvram_set_default_image();
-}
-
-static int nvram_set_default_image(void) {
-    int dirfd;
-    PRINT_MSG("%s\n", "Copying overrides from defaults folder!");
-    dirfd = dir_lock();
-    system("/bin/cp "OVERRIDE_POINT"* "MOUNT_POINT);
-    dir_unlock(dirfd);
     return E_SUCCESS;
 }
 
