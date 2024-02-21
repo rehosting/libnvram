@@ -552,15 +552,6 @@ int nvram_set_default(void) {
     if (Nvrams) {
         PRINT_MSG("Loading from native built-in table: %s (%p) = %d!\n", "Nvrams", Nvrams, nvram_set_default_table(Nvrams));
     }
-    return nvram_set_default_image();
-}
-
-static int nvram_set_default_image(void) {
-    int dirfd;
-    PRINT_MSG("%s\n", "Copying overrides from defaults folder!");
-    dirfd = dir_lock();
-    system("/bin/cp "OVERRIDE_POINT"* "MOUNT_POINT);
-    dir_unlock(dirfd);
     return E_SUCCESS;
 }
 
