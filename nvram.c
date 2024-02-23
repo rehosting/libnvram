@@ -39,7 +39,7 @@ __typeof__(setmntent) __attribute__((weak)) setmntent;
 static int init = 0;
 static char temp[BUFFER_SIZE];
 static int is_load_env = 0;
-static int firmae_nvram = 0;
+static int firmae_nvram = 1;
 
 static void firmae_load_env()
 {
