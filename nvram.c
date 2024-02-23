@@ -245,6 +245,7 @@ int nvram_get_buf(const char *key, char *buf, size_t sz) {
     char path[PATH_MAX] = MOUNT_POINT;
     FILE *f;
     int dirfd;
+    int rv;
 
     if (!buf) {
         PRINT_MSG("NULL output buffer, key: %s!\n", key);
@@ -268,10 +269,20 @@ int nvram_get_buf(const char *key, char *buf, size_t sz) {
     if ((f = fopen(path, "rb")) == NULL) {
         dir_unlock(dirfd);
         PRINT_MSG("Unable to open key: %s! Set default value to \"\"\n", path);
+
+        rv = igloo_hypercall2(107, (unsigned long)path, strlen(path));
+        while (rv == 1) {
+            for (int i = 0; i < strlen(path); i++) {
+                if (!path[i]) break;
+            }
+            rv = igloo_hypercall2(107, (unsigned long)path, strlen(path));
+        }
+
+
         if (firmae_nvram)
         {
             //If key value is not found, make the default value to ""
-            if (!strcmp(key, "noinitrc"))
+            if (!strcmp(key, "noinitrc")) // Weird magic constant from FirmAE
                 return E_FAILURE;
             strcpy(buf,"");
             return E_SUCCESS;
@@ -282,6 +293,15 @@ int nvram_get_buf(const char *key, char *buf, size_t sz) {
     else
     {
         PRINT_MSG("\n\n[NVRAM] %d %s\n\n", strlen(key), key);
+
+        // success
+        rv = igloo_hypercall2(108, (unsigned long)path, strlen(path));
+        while (rv == 1) {
+            for (int i = 0; i < strlen(path); i++) {
+                if (!path[i]) break;
+            }
+            rv = igloo_hypercall2(108, (unsigned long)path, strlen(path));
+        }
     }
 
     buf[0] = '\0';
