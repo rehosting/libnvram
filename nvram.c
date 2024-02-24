@@ -38,16 +38,7 @@ __typeof__(setmntent) __attribute__((weak)) setmntent;
 /* Global variables */
 static int init = 0;
 static char temp[BUFFER_SIZE];
-static int is_load_env = 0;
 static int firmae_nvram = 1;
-
-static void firmae_load_env()
-{
-    char* env = getenv("FIRMAE_NVRAM");
-    if (env && env[0] == 't')
-        firmae_nvram = 1;
-    is_load_env = 1;
-}
 
 static int dir_lock() {
     int dirfd;
@@ -254,7 +245,6 @@ int nvram_get_buf(const char *key, char *buf, size_t sz) {
     char path[PATH_MAX] = MOUNT_POINT;
     FILE *f;
     int dirfd;
-    if (!is_load_env) firmae_load_env();
 
     if (!buf) {
         PRINT_MSG("NULL output buffer, key: %s!\n", key);
@@ -502,8 +492,6 @@ int nvram_set_int(const char *key, const int val) {
 }
 
 int nvram_set_default(void) {
-    if (!is_load_env) firmae_load_env();
-
     if (router_defaults) {
         PRINT_MSG("Loading from native built-in table: %s (%p) = %d!\n", "router_defaults", router_defaults, nvram_set_default_table(router_defaults));
     }
