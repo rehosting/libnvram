@@ -39,7 +39,7 @@ void log_match(match m) {
 }
 
 // Simple string length calculation
-inline size_t minimal_strlen(const char *s) {
+size_t minimal_strlen(const char *s) {
     size_t len = 0;
     while (s[len]) ++len;
     return len;
@@ -64,7 +64,7 @@ int minimal_strcmp(const char *s1, const char *s2, short do_log) {
     return s1[i] - s2[i];
 }
 
-inline int minimal_strncmp(const char *s1, const char *s2, size_t n, short do_log) {
+int minimal_strncmp(const char *s1, const char *s2, size_t n, short do_log) {
     for (size_t i = 0; i < n; ++i) {
         if (s1[i] != s2[i] || !s1[i]) {
             // Additional logic to log if TARGET_VALUE is present
@@ -104,9 +104,6 @@ char *getenv(const char *name) {
     char *result = minimal_getenv(name);
 
     // if the first len(TARGET_VALUE) characters of result match our target, log it
-    // XXX: If we directly do a function call with TARGET_VALUE as an argument, we'll trigger out
-    // own instrumentation and log result as a potential value compared against DYNVAL.
-    // We avoid this by making minimal_strncmp inline
     if (result && minimal_strncmp(result, TARGET_VALUE, minimal_strlen(result), 0) == 0) {
         log_match((match) {GETENV, name});
     }
