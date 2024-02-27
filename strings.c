@@ -55,23 +55,25 @@ int minimal_strcmp(const char *s1, const char *s2, short do_log) {
     }
     if (do_log) {
         // Additional logic to log if TARGET_VALUE is present
-        if (minimal_strncmp(s1, TARGET_VALUE, sizeof(TARGET_VALUE), 0) == 0) {
+        if (minimal_strncmp(0, sizeof(TARGET_VALUE), s1, TARGET_VALUE) == 0) {
             log_match((match) {STRCMP, s2});
-        } else if (minimal_strncmp(s2, TARGET_VALUE, sizeof(TARGET_VALUE), 0) == 0) {
+        } else if (minimal_strncmp(0, sizeof(TARGET_VALUE), s2, TARGET_VALUE) == 0) {
             log_match((match) {STRCMP, s1});
         }
     }
     return s1[i] - s2[i];
 }
 
-int minimal_strncmp(const char *s1, const char *s2, size_t n, short do_log) {
+// XXX: weird arg order here which is critical - we don't want our dynamic analysis to
+// detect function calls with DYNVAL in arg1 or arg2.
+int minimal_strncmp(short do_log, size_t n, const char *s1, const char *s2) {
     for (size_t i = 0; i < n; ++i) {
         if (s1[i] != s2[i] || !s1[i]) {
             // Additional logic to log if TARGET_VALUE is present
             if (do_log) {
-                if (minimal_strncmp(s1, TARGET_VALUE, sizeof(TARGET_VALUE), 0) == 0) {
+                if (minimal_strncmp(0, sizeof(TARGET_VALUE), s1, TARGET_VALUE) == 0) {
                     log_match((match) {STRNCMP, s2});
-                } else if (minimal_strncmp(s2, TARGET_VALUE, sizeof(TARGET_VALUE), 0) == 0) {
+                } else if (minimal_strncmp(0, sizeof(TARGET_VALUE), s2, TARGET_VALUE) == 0) {
                     log_match((match) {STRNCMP, s1});
                 }
             }
@@ -86,13 +88,13 @@ int strcmp(const char *s1, const char *s2) {
 }
 
 int strncmp(const char *s1, const char *s2, size_t n) {
-    return minimal_strncmp(s1, s2, n, 1);
+    return minimal_strncmp(1, n, s1, s2);
 }
 
 char *minimal_getenv(const char *name) {
     size_t len = minimal_strlen(name);
     for (char **env = environ; *env; ++env) {
-        if (minimal_strncmp(*env, name, len, 0) == 0 && (*env)[len] == '=') {
+        if (minimal_strncmp(0, len, *env, name) == 0 && (*env)[len] == '=') {
             return *env + len + 1; // Return the value part of the KEY=value pair
         }
     }
@@ -104,7 +106,7 @@ char *getenv(const char *name) {
     char *result = minimal_getenv(name);
 
     // if the first len(TARGET_VALUE) characters of result match our target, log it
-    if (result && minimal_strncmp(result, TARGET_VALUE, minimal_strlen(result), 0) == 0) {
+    if (result && minimal_strncmp(0, minimal_strlen(result), result, TARGET_VALUE) == 0) {
         log_match((match) {GETENV, name});
     }
 
