@@ -18,7 +18,6 @@
 #include <mntent.h>
 #include <fcntl.h>
 
-#include "alias.h"
 #include "nvram.h"
 #include "config.h"
 #include "strings.h"
@@ -58,6 +57,23 @@ static void dir_unlock(int dirfd) {
     close(dirfd);
     return;
 }
+
+int true() {
+    return E_SUCCESS; //1
+}
+
+int false() {
+    return E_FAILURE; // 0
+}
+
+int true1(char* a1) {
+    return E_SUCCESS; //1
+}
+
+int false1(char* a1) {
+    return E_FAILURE; // 0
+}
+
 
 int nvram_init(void) {
     init = 1;
@@ -624,27 +640,168 @@ int parse_nvram_from_file(const char *file)
     return E_SUCCESS;
 }
 
-#ifdef FIRMAE_KERNEL
-//DIR-615I2, DIR-615I3, DIR-825C1 patch
-int VCTGetPortAutoNegSetting(char *a1, int a2){
-    PRINT_MSG("%s\n", "Dealing wth ioctl ...");
-    return 0;
+/* Atheros/Broadcom NVRAM */
+
+int nvram_get_nvramspace(void) {
+    return NVRAM_SIZE;
 }
 
-// netgear 'Rxxxx' series patch to prevent infinite loop in httpd
-int agApi_fwGetFirstTriggerConf(char *a1)
-{
-    PRINT_MSG("%s\n", "agApi_fwGetFirstTriggerConf called!");
-    return 1;
+
+char *nvram_nget(const char *fmt, ...) {
+    va_list va;
+
+    va_start(va, fmt);
+    vsnprintf(temp, BUFFER_SIZE, fmt, va);
+    va_end(va);
+
+    return nvram_get(temp);
 }
 
-// netgear 'Rxxxx' series patch to prevent infinite loop in httpd
-int agApi_fwGetNextTriggerConf(char *a1)
-{
-    PRINT_MSG("%s\n", "agApi_fwGetNextTriggerConf called!");
-    return 1;
+int nvram_nset(const char *val, const char *fmt, ...) {
+    va_list va;
+
+    va_start(va, fmt);
+    vsnprintf(temp, BUFFER_SIZE, fmt, va);
+    va_end(va);
+
+    return nvram_set(temp, val);
 }
-#endif
+
+int nvram_nset_int(const int val, const char *fmt, ...) {
+    va_list va;
+
+    va_start(va, fmt);
+    vsnprintf(temp, BUFFER_SIZE, fmt, va);
+    va_end(va);
+
+    return nvram_set_int(temp, val);
+}
+
+int nvram_nmatch(const char *val, const char *fmt, ...) {
+    va_list va;
+
+    va_start(va, fmt);
+    vsnprintf(temp, BUFFER_SIZE, fmt, va);
+    va_end(va);
+
+    return nvram_match(temp, val);
+}
+
+/* Realtek */
+int apmib_get(const int key, void *buf) {
+    int res;
+
+    snprintf(temp, BUFFER_SIZE, "%d", key);
+    if ((res = nvram_get_int(temp))) {
+        (*(int32_t *) buf) = res;
+    }
+
+    return res;
+}
+
+int apmib_set(const int key, void *buf) {
+    snprintf(temp, BUFFER_SIZE, "%d", key);
+    return nvram_set_int(temp, ((int32_t *) buf)[0]);
+}
+
+/* Netgear ACOS */
+
+int WAN_ith_CONFIG_GET(char *buf, const char *fmt, ...) {
+    va_list va;
+
+    va_start(va, fmt);
+    vsnprintf(temp, BUFFER_SIZE, fmt, va);
+    va_end(va);
+
+    return nvram_get_buf(temp, buf, USER_BUFFER_SIZE);
+}
+
+/* ZyXel / Edimax */
+// many functions expect the opposite return values: (0) success, failure (1/-1)
+
+int nvram_getall_adv(int unk, char *buf, size_t len) {
+    return nvram_getall(buf, len) == E_SUCCESS ? E_FAILURE : E_SUCCESS;
+}
+
+char *nvram_get_adv(int unk, const char *key) {
+    return nvram_get(key);
+}
+
+int nvram_set_adv(int unk, const char *key, const char *val) {
+    return nvram_set(key, val);
+}
+
+int nvram_state(int unk1, void *unk2, void *unk3) {
+    return E_FAILURE;
+}
+
+int envram_commit(void) {
+    return !nvram_commit();
+}
+
+int envram_default(void) {
+    return E_FAILURE;
+}
+
+int envram_load(void)  {
+    return !nvram_init();
+}
+
+int envram_safe_load(void)  {
+    return !nvram_init();
+}
+
+int envram_match(const char *key, const char *val)  {
+    return !nvram_match(key, val);
+}
+
+int envram_get(const char* key, char *buf) {
+    // may be incorrect
+    return !nvram_get_buf(key, buf, USER_BUFFER_SIZE);
+}
+int envram_getf(const char* key, const char *fmt, ...) {
+    va_list va;
+    char *val = nvram_get(key);
+
+    if (!val) {
+        return !E_SUCCESS;
+    }
+
+    va_start(va, fmt);
+    vsscanf(val, fmt, va);
+    va_end(va);
+
+    free(val);
+    return !E_FAILURE;
+}
+
+int envram_set(const char *key, const char *val) {
+    return !nvram_set(key, val);
+}
+
+int envram_setf(const char* key, const char* fmt, ...) {
+    va_list va;
+
+    va_start(va, fmt);
+    vsnprintf(temp, BUFFER_SIZE, fmt, va);
+    va_end(va);
+
+    return !nvram_set(key, temp);
+}
+
+int envram_unset(const char *key) {
+    return !nvram_unset(key);
+}
+
+/* Ralink */
+
+char *nvram_bufget(int idx, const char *key) {
+    return nvram_safe_get(key);
+}
+
+int nvram_bufset(int idx, const char *key, const char *val) {
+    return nvram_set(key, val);
+}
 
 // Hack to use static variables in shared library
 #include "alias.c"
