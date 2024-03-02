@@ -23,17 +23,10 @@
 #include "config.h"
 #include "strings.h"
 
-// Two left-over weak symbols from the original code
-extern const char *router_defaults[] __attribute__((weak));
-extern const char *Nvrams[] __attribute__((weak));
-
 // https://lkml.org/lkml/2007/3/9/10
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]) + sizeof(typeof(int[1 - 2 * !!__builtin_types_compatible_p(typeof(arr), typeof(&arr[0]))])) * 0)
 
 #define PRINT_MSG(fmt, ...) do { if (DEBUG) { fprintf(stderr, "%s: "fmt, __FUNCTION__, __VA_ARGS__); } } while (0)
-
-/* Weak symbol definitions for library functions that may not be present */
-__typeof__(setmntent) __attribute__((weak)) setmntent;
 
 /* Global variables */
 static int init = 0;
@@ -52,7 +45,6 @@ static int dir_lock() {
     if(dirfd < 0) {
        PRINT_MSG("Couldn't open %s\n", MOUNT_POINT);
     }
-    //if(_syscall2(int,sysflock,int,dirfd,int,LOCK_EX) < 0) {
     if(flock_asm(dirfd,LOCK_EX) < 0) {
        PRINT_MSG("Couldn't lock %s\n", MOUNT_POINT);
     }
@@ -60,7 +52,6 @@ static int dir_lock() {
 }
 
 static void dir_unlock(int dirfd) {
-    //if(_syscall2(int,sysflock,int,dirfd,int,LOCK_UN) < 0) {
     if(flock_asm(dirfd,LOCK_UN) < 0) {
        PRINT_MSG("Couldn't unlock %s\n", MOUNT_POINT);
     }
@@ -70,7 +61,7 @@ static void dir_unlock(int dirfd) {
 
 int nvram_init(void) {
     init = 1;
-    return nvram_set_default();
+    return E_SUCCESS;
 }
 
 int nvram_reset(void) {
@@ -80,8 +71,7 @@ int nvram_reset(void) {
         PRINT_MSG("%s\n", "Unable to clear NVRAM!");
         return E_FAILURE;
     }
-
-    return nvram_set_default();
+    return E_SUCCESS;
 }
 
 int nvram_clear(void) {
@@ -508,27 +498,6 @@ int nvram_set_int(const char *key, const int val) {
 
     fclose(f);
     dir_unlock(dirfd);
-    return E_SUCCESS;
-}
-
-int nvram_set_default(void) {
-    if (router_defaults) {
-        PRINT_MSG("Loading from native built-in table: %s (%p) = %d!\n", "router_defaults", router_defaults, nvram_set_default_table(router_defaults));
-    }
-    if (Nvrams) {
-        PRINT_MSG("Loading from native built-in table: %s (%p) = %d!\n", "Nvrams", Nvrams, nvram_set_default_table(Nvrams));
-    }
-    return E_SUCCESS;
-}
-
-static int nvram_set_default_table(const char *tbl[]) {
-    size_t i = 0;
-
-    while (tbl[i]) {
-        nvram_set(tbl[i], tbl[i + 1]);
-        i += (tbl[i + 2] != 0 && tbl[i + 2] != (char *) 1) ? 2 : 3;
-    }
-
     return E_SUCCESS;
 }
 

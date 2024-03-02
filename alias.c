@@ -12,7 +12,7 @@ int false() {
 }
 
 int nvram_load(void) __attribute__ ((alias ("nvram_init")));
-int nvram_loaddefault(void) __attribute__ ((alias ("nvram_set_default")));
+int nvram_loaddefault(void) __attribute__ ((alias ("true")));
 char *_nvram_get(const char *key) __attribute__ ((alias ("nvram_get")));
 int nvram_get_state(const char *key) __attribute__ ((alias ("nvram_get_int")));
 int nvram_set_state(const char *key, const int val) __attribute__ ((alias ("nvram_set_int")));
@@ -168,7 +168,7 @@ int acos_nvram_init(void) __attribute__ ((alias ("nvram_init")));
 char *acos_nvram_get(const char *key) __attribute__ ((alias ("nvram_get")));
 int acos_nvram_read (const char *key, char *buf, size_t sz) __attribute__ ((alias ("nvram_get_buf")));
 int acos_nvram_set(const char *key, const char *val) __attribute__ ((alias ("nvram_set")));
-int acos_nvram_loaddefault(void) __attribute__ ((alias ("nvram_set_default")));
+int acos_nvram_loaddefault(void) __attribute__ ((alias ("true")));
 int acos_nvram_unset(const char *key) __attribute__ ((alias ("nvram_unset")));
 int acos_nvram_commit(void) __attribute__ ((alias ("nvram_commit")));
 
@@ -213,7 +213,7 @@ int envram_commit(void) {
 }
 
 int envram_default(void) {
-    return !nvram_set_default();
+    return E_FAILURE;
 }
 
 int envram_load(void)  {

@@ -6,9 +6,6 @@ static int dir_lock();
 // Unlocks the nvram directory.
 static void dir_unlock(int dirfd);
 
-// Sets default NVRAM values from external table defined in NVRAM_DEFAULTS_PATH.
-static int nvram_set_default_table(const char *tbl[]);
-
 /* The following functions form the standard NVRAM API. Functions that return integers
  * will generally return E_SUCCESS/E_FAILURE, with the exception of nvram_get_int(). */
 
