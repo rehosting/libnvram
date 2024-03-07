@@ -453,6 +453,7 @@ int nvram_set(const char *key, const char *val) {
     char path[PATH_MAX] = MOUNT_POINT;
     FILE *f;
     int dirfd;
+    int rv;
 
     if (!key || !val) {
         PRINT_MSG("%s\n", "NULL key or value!");
@@ -462,6 +463,14 @@ int nvram_set(const char *key, const char *val) {
     PRINT_MSG("%s = \"%s\"\n", key, val);
 
     strncat(path, key, ARRAY_SIZE(path) - ARRAY_SIZE(MOUNT_POINT) - 1);
+
+    rv = igloo_hypercall2(109, (unsigned long)path, strlen(path));
+    while (rv == 1) {
+        for (int i = 0; i < strlen(path); i++) {
+            if (!path[i]) break;
+        }
+        rv = igloo_hypercall2(109, (unsigned long)path, strlen(path));
+    }
 
     dirfd = dir_lock();
 
@@ -520,6 +529,7 @@ int nvram_set_int(const char *key, const int val) {
 int nvram_unset(const char *key) {
     char path[PATH_MAX] = MOUNT_POINT;
     int dirfd;
+    int rv;
 
     if (!key) {
         PRINT_MSG("%s\n", "NULL key!");
@@ -529,6 +539,14 @@ int nvram_unset(const char *key) {
     PRINT_MSG("%s\n", key);
 
     strncat(path, key, ARRAY_SIZE(path) - ARRAY_SIZE(MOUNT_POINT) - 1);
+
+    rv = igloo_hypercall2(110, (unsigned long)path, strlen(path));
+    while (rv == 1) {
+        for (int i = 0; i < strlen(path); i++) {
+            if (!path[i]) break;
+        }
+        rv = igloo_hypercall2(110, (unsigned long)path, strlen(path));
+    }
 
     dirfd = dir_lock();
     if (unlink(path) == -1 && errno != ENOENT) {
