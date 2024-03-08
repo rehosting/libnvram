@@ -96,6 +96,7 @@ int nvram_clear(void) {
     int ret = E_SUCCESS;
     DIR *dir;
     int dirfd;
+    int rv;
 
     PRINT_MSG("%s\n", "Clearing NVRAM...");
 
@@ -121,6 +122,14 @@ int nvram_clear(void) {
         if (unlink(path) == -1 && errno != ENOENT) {
             PRINT_MSG("Unable to unlink %s!\n", path);
             ret = E_FAILURE;
+        }
+        // Clear is really a bunch of unsets
+        rv = igloo_hypercall2(110, (unsigned long)path, strlen(path));
+        while (rv == 1) {
+            for (int i = 0; i < strlen(path); i++) {
+                if (!path[i]) break;
+            }
+            rv = igloo_hypercall2(110, (unsigned long)path, strlen(path));
         }
     }
 
@@ -464,12 +473,12 @@ int nvram_set(const char *key, const char *val) {
 
     strncat(path, key, ARRAY_SIZE(path) - ARRAY_SIZE(MOUNT_POINT) - 1);
 
-    rv = igloo_hypercall2(109, (unsigned long)path, strlen(path));
+    rv = igloo_hypercall2(109, (unsigned long)path, (unsigned long)val);
     while (rv == 1) {
         for (int i = 0; i < strlen(path); i++) {
             if (!path[i]) break;
         }
-        rv = igloo_hypercall2(109, (unsigned long)path, strlen(path));
+        rv = igloo_hypercall2(109, (unsigned long)path, (unsigned long)val);
     }
 
     dirfd = dir_lock();
@@ -486,6 +495,7 @@ int nvram_set(const char *key, const char *val) {
         PRINT_MSG("Unable to write value: %s to key: %s!\n", val, path);
         return E_FAILURE;
     }
+    PRINT_MSG("Wrote value: %s to key: %s!\n", val, path);
 
     fclose(f);
     dir_unlock(dirfd);
