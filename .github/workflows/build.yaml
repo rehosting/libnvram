@@ -4,12 +4,19 @@ on:
   push:
     branches:
       - master
+      - stable
 
 jobs:
   build:
     runs-on: panda-arc
 
     steps:
+      - name: Get next version
+        uses: reecetech/version-increment@2023.10.1
+        id: version
+        with:
+          use_api: true
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -23,7 +30,7 @@ jobs:
           name: libnvram-latest.tar.gz
           path: libnvram-latest.tar.gz
 
-      - name: Create release
+      - name: Create stable release
         id: create_release
         uses: actions/create-release@v1
         env:
@@ -35,6 +42,19 @@ jobs:
             Release @${{ github.ref }}
           draft: true
           prerelease: false
+      - name: Create release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.version.outputs.v-version }}${{ github.ref == 'refs/head/stable' && '-stable' || '' }}
+          release_name: Release ${{ steps.version.outputs.v-version }} ${{ github.ref }}
+          body: |
+            Release ${{ steps.version.outputs.v-version }} @${{ github.ref }}
+          draft: true
+          prerelease: false
+          
       - name: Upload release asset
         uses: actions/upload-release-asset@v1
         env:
@@ -44,6 +64,7 @@ jobs:
           asset_path: ./libnvram-latest.tar.gz
           asset_name: libnvram-latest.tar.gz
           asset_content_type: application/gzip
+
       - name: Publish release
         uses: StuYarrow/publish-release@v1.1.2
         env:
