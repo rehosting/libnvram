@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: panda-arc
+    # runs-on: panda-arc
 
     steps:
       - name: Get next version
