@@ -13,14 +13,14 @@ jobs:
       contents: write
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Get next version
         uses: reecetech/version-increment@2023.10.1
         id: version
         with:
           use_api: true
-
-      - name: Checkout code
-        uses: actions/checkout@v4
 
       - name: Build 
         run: |
