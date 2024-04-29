@@ -832,5 +832,4 @@ int nvram_bufset(int idx, const char *key, const char *val) {
 }
 
 // Hack to use static variables in shared library
-#include "alias.c"
 #include "strings.c"
