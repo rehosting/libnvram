@@ -6,7 +6,7 @@ rm -f *.so.*
 ./setup.sh arm
 ./setup.sh mipsel
 ./setup.sh mipseb
-
+./setup.sh mips64eb
 rm -rf utils   || true
 mkdir utils
 mv *.so.* utils

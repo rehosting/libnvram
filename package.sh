@@ -24,5 +24,10 @@ mv nvram.o $SCRATCH/nvram.o.mipseb
 mv libnvram.so $SCRATCH/libnvram.so.mipseb
 make clean
 
+CC=mips64eb-linux-musl-gcc make CFLAGS="-DCONFIG_MIPS=1 -march=mips64r2 -mabi=64" libnvram.so -C /app
+mv nvram.o $SCRATCH/nvram.o.mips64eb
+mv libnvram.so $SCRATCH/libnvram.so.mips64eb
+make clean
+
 tar -czvf /app/libnvram-latest.tar.gz -C $(dirname $SCRATCH) libnvram
 rm -rf /app/out
