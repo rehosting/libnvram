@@ -4,6 +4,7 @@ set -eux
 
 rm -f *.so.*
 ./setup.sh arm
+./setup.sh aarch64
 ./setup.sh mipsel
 ./setup.sh mipseb
 ./setup.sh mips64eb
