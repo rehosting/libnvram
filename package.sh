@@ -14,6 +14,11 @@ mv nvram.o $SCRATCH/nvram.o.armel
 mv libnvram.so $SCRATCH/libnvram.so.armel
 make clean
 
+CC=aarch64-linux-musl-gcc make CFLAGS="-DCONFIG_AARCH64=1" libnvram.so -C /app
+mv nvram.o $SCRATCH/nvram.o.aarch64
+mv libnvram.so $SCRATCH/libnvram.so.aarch64
+make clean
+
 CC=mipsel-linux-musl-gcc make CFLAGS="-DCONFIG_MIPS=1 -march=mips32r2" libnvram.so -C /app
 mv nvram.o $SCRATCH/nvram.o.mipsel
 mv libnvram.so $SCRATCH/libnvram.so.mipsel
