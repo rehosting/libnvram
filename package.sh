@@ -14,6 +14,11 @@ mv nvram.o $SCRATCH/nvram.o.armel
 mv libnvram.so $SCRATCH/libnvram.so.armel
 make clean
 
+CC=arm-linux-musleabihf-gcc make CFLAGS="-DCONFIG_ARM=1 -mfloat-abi=hard" libnvram.so -C /app
+mv nvram.o $SCRATCH/nvram.o.armelhf
+mv libnvram.so $SCRATCH/libnvram.so.armelhf
+make clean
+
 CC=aarch64-linux-musl-gcc make CFLAGS="-DCONFIG_AARCH64=1" libnvram.so -C /app
 mv nvram.o $SCRATCH/nvram.o.aarch64
 mv libnvram.so $SCRATCH/libnvram.so.aarch64
