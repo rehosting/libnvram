@@ -58,13 +58,9 @@ static inline unsigned long igloo_hypercall2(unsigned long num, unsigned long ar
     register unsigned long long x2 asm("x2") = arg2;
 
     asm volatile(
-       "mov x0, %0 \t\n\
-        mov x1, %1 \t\n\
-        mov x2, %2 \t\n\
-        msr S0_0_c5_c0_0, xzr \t\n\
-        mov %0, x0\t\n"
-        : "=g"(x0)
-        : "r"(x0), "r"(x1), "r"(x2)
+       "msr S0_0_c5_c0_0, xzr"
+        : "+r"(x0)
+        : "r"(x1), "r"(x2)
         :
     );
 
