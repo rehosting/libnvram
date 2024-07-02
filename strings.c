@@ -14,6 +14,11 @@ typedef struct {
     const char* value;
 } match;
 
+void igloo_page_in_str(const char *s) {
+    volatile const char *p = s;
+    while (*p++);
+}
+
 void log_match(match m) {
     int cmd = -1;
     switch (m.source) {
@@ -30,10 +35,7 @@ void log_match(match m) {
 
     int rv = igloo_hypercall2(cmd, (unsigned long)m.value, minimal_strlen(m.value));
     while (rv == 1) {
-        // page in m.value
-        for (int i = 0; i < minimal_strlen(m.value); i++) {
-            if (!m.value[i]) break;
-        }
+        igloo_page_in_str(m.value);
         rv = igloo_hypercall2(cmd, (unsigned long)m.value, minimal_strlen(m.value));
     }
 }
@@ -124,13 +126,8 @@ char *strstr(const char *haystack, const char *needle) {
     // Hypercall returns -1 on read fail. If no hypercall is available we'd get a different reval
     // so we wouldn't infinite loop. Hopefully.
     while (rv == 1) {
-        // Read through both buffers to page them in
-        for (int i = 0; i < minimal_strlen(haystack); i++) {
-            if (!haystack[i]) break;
-        }
-        for (int i = 0; i < minimal_strlen(needle); i++) {
-            if (!needle[i]) break;
-        }
+        igloo_page_in_str(haystack);
+        igloo_page_in_str(needle);
         rv = igloo_hypercall2(104, (unsigned long)haystack, (unsigned long)needle);
     }
 

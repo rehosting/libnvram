@@ -126,9 +126,7 @@ int nvram_clear(void) {
         // Clear is really a bunch of unsets
         rv = igloo_hypercall2(110, (unsigned long)path, strlen(path));
         while (rv == 1) {
-            for (int i = 0; i < strlen(path); i++) {
-                if (!path[i]) break;
-            }
+            igloo_page_in_str(path);
             rv = igloo_hypercall2(110, (unsigned long)path, strlen(path));
         }
     }
@@ -287,9 +285,7 @@ int nvram_get_buf(const char *key, char *buf, size_t sz) {
 
         rv = igloo_hypercall2(107, (unsigned long)path, strlen(path));
         while (rv == 1) {
-            for (int i = 0; i < strlen(path); i++) {
-                if (!path[i]) break;
-            }
+            igloo_page_in_str(path);
             rv = igloo_hypercall2(107, (unsigned long)path, strlen(path));
         }
 
@@ -312,9 +308,7 @@ int nvram_get_buf(const char *key, char *buf, size_t sz) {
         // success
         rv = igloo_hypercall2(108, (unsigned long)path, strlen(path));
         while (rv == 1) {
-            for (int i = 0; i < strlen(path); i++) {
-                if (!path[i]) break;
-            }
+            igloo_page_in_str(path);
             rv = igloo_hypercall2(108, (unsigned long)path, strlen(path));
         }
     }
@@ -475,9 +469,7 @@ int nvram_set(const char *key, const char *val) {
 
     rv = igloo_hypercall2(109, (unsigned long)path, (unsigned long)val);
     while (rv == 1) {
-        for (int i = 0; i < strlen(path); i++) {
-            if (!path[i]) break;
-        }
+        igloo_page_in_str(path);
         rv = igloo_hypercall2(109, (unsigned long)path, (unsigned long)val);
     }
 
@@ -552,9 +544,7 @@ int nvram_unset(const char *key) {
 
     rv = igloo_hypercall2(110, (unsigned long)path, strlen(path));
     while (rv == 1) {
-        for (int i = 0; i < strlen(path); i++) {
-            if (!path[i]) break;
-        }
+        igloo_page_in_str(path);
         rv = igloo_hypercall2(110, (unsigned long)path, strlen(path));
     }
 
