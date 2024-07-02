@@ -7,7 +7,7 @@ static inline void igloo_hypercall(unsigned long num, unsigned long arg1) {
        "movz $0, $0, $0"
         : "+r"(a0)  // Input and output in R0
         : "r"(a1) // arg1 in register A1
-        : // No clobber
+        : "memory"
     );
 
 #elif defined(CONFIG_AARCH64)
@@ -20,7 +20,7 @@ static inline void igloo_hypercall(unsigned long num, unsigned long arg1) {
         msr S0_0_c5_c0_0, xzr"
         :
         : "r"(x0), "r"(x1)
-        :
+        : "memory"
     );
 #elif defined(CONFIG_ARM)
   register uint32_t r0 asm("r0") = num;
@@ -31,7 +31,7 @@ static inline void igloo_hypercall(unsigned long num, unsigned long arg1) {
       mcr p7, 0, r0, c0, c0, 0"
       :
       : "r"(r0), "r"(r1)
-      :
+      : "memory"
   );
 #else
 #error "No igloo_hypercall support for architecture"
@@ -48,7 +48,7 @@ static inline unsigned long igloo_hypercall2(unsigned long num, unsigned long ar
        "mcr p7, 0, r0, c0, c0, 0"
         : "+r"(r0)  // Input and output
         : "r"(r1), "r"(r2)
-        : // No clobber
+        : "memory"
     );
 
     return r0;
@@ -61,7 +61,7 @@ static inline unsigned long igloo_hypercall2(unsigned long num, unsigned long ar
        "msr S0_0_c5_c0_0, xzr"
         : "+r"(x0)
         : "r"(x1), "r"(x2)
-        :
+        : "memory"
     );
 
     return x0;
@@ -74,7 +74,7 @@ static inline unsigned long igloo_hypercall2(unsigned long num, unsigned long ar
        "movz $0, $0, $0"
         : "+r"(a0)  // Input and output in R0
         : "r"(a1) , "r" (a2)// arg1 in register A1
-        : // No clobber
+        : "memory"
     );
     return a0;
 
