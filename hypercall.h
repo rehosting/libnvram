@@ -11,8 +11,8 @@ static inline void igloo_hypercall(unsigned long num, unsigned long arg1) {
     );
 
 #elif defined(CONFIG_AARCH64)
-    register unsigned long long x0 asm("x8") = num;
-    register unsigned long long x1 asm("x0") = arg1;
+    register unsigned long long x8 asm("x8") = num;
+    register unsigned long long x0 asm("x0") = arg1;
 
     asm volatile(
         "mov x8, %0 \t\n\
@@ -53,14 +53,14 @@ static inline unsigned long igloo_hypercall2(unsigned long num, unsigned long ar
 
     return r0;
 #elif defined(CONFIG_AARCH64)
-    register unsigned long long x0 asm("x8") = num;
-    register unsigned long long x1 asm("x0") = arg1;
-    register unsigned long long x2 asm("x1") = arg2;
+    register unsigned long long x8 asm("x8") = num;
+    register unsigned long long x0 asm("x0") = arg1;
+    register unsigned long long x1 asm("x1") = arg2;
 
     asm volatile(
        "msr S0_0_c5_c0_0, xzr"
         : "+r"(x0)
-        : "r"(x1), "r"(x2)
+        : "r"(x8), "r"(x1)
         : "memory"
     );
 
