@@ -5,8 +5,8 @@ static inline void igloo_hypercall(unsigned long num, unsigned long arg1) {
 
     asm volatile(
        "movz $0, $0, $0"
-        : "+r"(v0)  // Input and output in R0
-        : "r"(a0) // arg1 in register A1
+        : "+r"(v0)
+        : "r"(a0) 
         : "memory"
     );
 
@@ -72,8 +72,8 @@ static inline unsigned long igloo_hypercall2(unsigned long num, unsigned long ar
 
     asm volatile(
        "movz $0, $0, $0"
-        : "+r"(v0)  // Input and output in R0
-        : "r"(a0) , "r" (a1)// arg1 in register A1
+        : "+r"(v0) 
+        : "r"(a0) , "r" (a1)
         : "memory"
     );
     return v0;
