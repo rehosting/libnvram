@@ -7,7 +7,7 @@ static inline void igloo_hypercall(unsigned long num, unsigned long arg1) {
        "movz $0, $0, $0"
         : "+r"(reg0)
         : "r"(reg1) // num in register v0
-        : // No clobber
+        : "memory"
     );
 
 
@@ -18,7 +18,7 @@ static inline void igloo_hypercall(unsigned long num, unsigned long arg1) {
             "msr S0_0_c5_c0_0, xzr \n"
             : "+r"(reg1)
             : "r"(reg0)
-            : // No clobber
+            : "memory"
         );
 #elif defined(CONFIG_ARM) 
     register unsigned long reg0 asm("r7") = num;
@@ -28,7 +28,7 @@ static inline void igloo_hypercall(unsigned long num, unsigned long arg1) {
     "mcr p7, 0, r0, c0, c0, 0"
       : "+r"(reg1)
       : "r"(reg0)
-      :
+      : "memory"
   );  
 #elif defined(CONFIG_X86_64)
     register unsigned long reg0 asm("rax") = num;
@@ -38,7 +38,7 @@ static inline void igloo_hypercall(unsigned long num, unsigned long arg1) {
         "cpuid"
         : "+r"(reg0)           // hypercall num + return value in rax
         : "r"(reg1)            // arguments
-        : // No clobber
+        : "memory"
     );
 #else
 #error "No igloo_hypercall support for architecture"
@@ -54,7 +54,7 @@ static inline unsigned long igloo_hypercall2(unsigned long num, unsigned long ar
        "msr S0_0_c5_c0_0, xzr \n"
         : "+r"(reg1)  // Input and output
         : "r"(reg0), "r"(reg2)
-        : // No clobber
+        : "memory"
     );
     return reg1;
 #elif defined(CONFIG_ARM)
@@ -66,10 +66,8 @@ static inline unsigned long igloo_hypercall2(unsigned long num, unsigned long ar
        "mcr p7, 0, r0, c0, c0, 0"
         : "+r"(reg1)  // Input and output
         : "r"(reg0), "r"(reg2)
-        : // No clobber
+        : "memory"
     );
-
-
 
     return reg1;
 
@@ -82,7 +80,7 @@ static inline unsigned long igloo_hypercall2(unsigned long num, unsigned long ar
        "movz $0, $0, $0"
         : "+r"(reg0)  // Input and output in R0
         : "r"(reg1) , "r" (reg2)// arg2 in register A1
-        : // No clobber
+        : "memory"
     );
     return reg0;
 #elif defined(CONFIG_X86_64)
@@ -94,7 +92,7 @@ static inline unsigned long igloo_hypercall2(unsigned long num, unsigned long ar
         "cpuid"
         : "+r"(reg0)           // hypercall num + return value in rax
         : "r"(reg1), "r"(reg2) // arguments
-        : // No clobber
+        : "memory"
     );
 
     return reg0;
