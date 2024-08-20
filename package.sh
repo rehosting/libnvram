@@ -44,5 +44,10 @@ mv nvram.o $SCRATCH/nvram.o.x86_64
 mv libnvram.so $SCRATCH/libnvram.so.x86_64
 make clean
 
+CC=i686-linux-musl-gcc make CFLAGS="-DCONFIG_I386=1" libnvram.so -C /app
+mv nvram.o $SCRATCH/nvram.o.i386
+mv libnvram.so $SCRATCH/libnvram.so.i386
+make clean
+
 tar -czvf /app/libnvram-latest.tar.gz -C $(dirname $SCRATCH) libnvram
 rm -rf /app/out
