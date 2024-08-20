@@ -38,7 +38,17 @@ static inline void igloo_hypercall(unsigned long num, unsigned long arg1) {
         "cpuid"
         : "+r"(reg0)           // hypercall num + return value in rax
         : "r"(reg1)            // arguments
-        : "memory"
+        : "memory", "rbx", "rcx", "rdx"
+    );
+#elif defined(CONFIG_I386)
+    register unsigned long reg0 asm("eax") = num;
+    register unsigned long reg1 asm("edi") = arg1;
+
+    asm volatile(
+        "cpuid"
+        : "+r"(reg0)           // hypercall num + return value in rax
+        : "r"(reg1)            // arguments
+        : "memory", "ebx", "ecx", "edx"
     );
 #else
 #error "No igloo_hypercall support for architecture"
@@ -92,7 +102,20 @@ static inline unsigned long igloo_hypercall2(unsigned long num, unsigned long ar
         "cpuid"
         : "+r"(reg0)           // hypercall num + return value in rax
         : "r"(reg1), "r"(reg2) // arguments
-        : "memory"
+        : "memory", "rbx", "rcx", "rdx"
+    );
+
+    return reg0;
+#elif defined(CONFIG_I386)
+    register unsigned long reg0 asm("eax") = num;
+    register unsigned long reg1 asm("edi") = arg1;
+    register unsigned long reg2 asm("esi") = arg2;
+
+    asm volatile(
+        "cpuid"
+        : "+r"(reg0)           // hypercall num + return value in rax
+        : "r"(reg1), "r"(reg2) // arguments
+        : "memory", "ebx", "ecx", "edx"
     );
 
     return reg0;
