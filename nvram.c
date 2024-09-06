@@ -30,7 +30,7 @@
 /* Global variables */
 static int init = 0;
 static char temp[BUFFER_SIZE];
-static int firmae_nvram = 1;
+#define FIRMAE_NVRAM 1
 
 static int dir_lock() {
     int dirfd;
@@ -267,10 +267,11 @@ int nvram_get_buf(const char *key, char *buf, size_t sz) {
 
     if (!key) {
         PRINT_MSG("NULL input key, buffer: %s!\n", buf);
-        if (firmae_nvram)
+#ifdef FIRMAE_NVRAM
             return E_SUCCESS;
-        else
+#else
             return E_FAILURE;
+#endif
     }
 
     PRINT_MSG("%s\n", key);
@@ -290,16 +291,16 @@ int nvram_get_buf(const char *key, char *buf, size_t sz) {
         }
 
 
-        if (firmae_nvram)
-        {
+#ifdef FIRMAE_NVRAM
             //If key value is not found, make the default value to ""
             if (!strcmp(key, "noinitrc")) // Weird magic constant from FirmAE
                 return E_FAILURE;
             strcpy(buf,"");
             return E_SUCCESS;
-        }
-        else
+#else
             return E_FAILURE;
+#endif
+
     }
     else
     {
