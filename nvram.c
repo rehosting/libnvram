@@ -293,8 +293,8 @@ int nvram_get_buf(const char *key, char *buf, size_t sz) {
 
 #ifdef FIRMAE_NVRAM
             //If key value is not found, make the default value to ""
-            if (!strcmp(key, "noinitrc")) // Weird magic constant from FirmAE
-                return E_FAILURE;
+            //if (!strcmp(key, "noinitrc")) // Weird magic constant from FirmAE
+            //    return E_FAILURE;
             strcpy(buf,"");
             return E_SUCCESS;
 #else
