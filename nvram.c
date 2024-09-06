@@ -278,9 +278,22 @@ int nvram_get_buf(const char *key, char *buf, size_t sz) {
 
     strncat(path, key, ARRAY_SIZE(path) - ARRAY_SIZE(MOUNT_POINT) - 1);
 
+    // Before taking the lock, check if the key exists, if not bail
+    if (access(path, F_OK) != 0) {
+#ifdef FIRMAE_NVRAM
+        // Key doesn't exist, set default empty value
+        buf[0] = '\0';
+        return E_SUCCESS;
+#else
+        return E_FAILURE;
+#endif
+    }
+
     dirfd = dir_lock();
 
     if ((f = fopen(path, "rb")) == NULL) {
+        // We just checked without the lock, but it's empty after we took the lock
+        // Someone must have just deleted it. Slow path but not wrong.
         dir_unlock(dirfd);
         PRINT_MSG("Unable to open key: %s! Set default value to \"\"\n", path);
 
@@ -295,7 +308,7 @@ int nvram_get_buf(const char *key, char *buf, size_t sz) {
             //If key value is not found, make the default value to ""
             //if (!strcmp(key, "noinitrc")) // Weird magic constant from FirmAE
             //    return E_FAILURE;
-            strcpy(buf,"");
+            buf[0] = '\0';
             return E_SUCCESS;
 #else
             return E_FAILURE;
@@ -343,6 +356,11 @@ int nvram_get_int(const char *key) {
     PRINT_MSG("%s\n", key);
 
     strncat(path, key, ARRAY_SIZE(path) - ARRAY_SIZE(MOUNT_POINT) - 1);
+
+    // Before taking the lock, check if the key exists, if not bail
+    if (access(path, F_OK) != 0) {
+        return E_FAILURE;
+    }
 
     dirfd = dir_lock();
 
