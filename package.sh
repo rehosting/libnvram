@@ -19,7 +19,7 @@ mv nvram.o $SCRATCH/nvram.o.armelhf
 mv libnvram.so $SCRATCH/libnvram.so.armelhf
 make clean
 
-CC=aarch64-linux-musl-gcc make CFLAGS="-DCONFIG_AARCH64=1" libnvram.so -C /app
+CC=aarch64-linux-musl-gcc make CFLAGS="-DCONFIG_ARM64=1" libnvram.so -C /app
 mv nvram.o $SCRATCH/nvram.o.aarch64
 mv libnvram.so $SCRATCH/libnvram.so.aarch64
 make clean

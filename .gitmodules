@@ -1,0 +1,3 @@
+[submodule "libhc"]
+	path = libhc
+	url = https://github.com/panda-re/libhc.git
