@@ -32,6 +32,89 @@ static int init = 0;
 static char temp[BUFFER_SIZE];
 #define FIRMAE_NVRAM 1
 
+static int _libinject_flock_asm(int fd, int op) {
+    // File lock with SYS_flock. We do this in assembly
+    // for portability - libc may not be available / match versions
+    // with the library we're building
+    int retval;
+#if defined(__mips64__)
+    asm volatile(
+    "daddiu $a0, %1, 0\n"  // Move fd to $a0
+    "daddiu $a1, %2, 0\n"  // Move op to $a1
+    "li $v0, %3\n"         // Load SYS_flock (the system call number) into $v0
+    "syscall\n"            // Make the system call
+    "move %0, $v0\n"       // Move the result from $v0 to retval
+    : "=r" (retval)        // Output
+    : "r" (fd), "r" (op), "i" (SYS_flock)  // Inputs
+    : "v0", "a0", "a1"     // Clobber list
+);
+#elif defined(__mips__)
+    asm volatile(
+    "move $a0, %1\n"        // Correctly move fd (from C variable) to $a0
+    "move $a1, %2\n"        // Correctly move op (from C variable) to $a1
+    "li $v0, %3\n"          // Load the syscall number for flock into $v0
+    "syscall\n"             // Perform the syscall
+    "move %0, $v0"          // Move the result from $v0 to retval
+    : "=r" (retval)         // Output
+    : "r" (fd), "r" (op), "i" (SYS_flock) // Inputs; "i" for immediate syscall number
+    : "v0", "a0", "a1"      // Clobber list
+);
+#elif defined(__arm__)
+    asm volatile(
+    "mov r0, %1\n"  // Move fd to r0, the first argument for the system call
+    "mov r1, %2\n"  // Move op to r1, the second argument for the system call
+    "mov r7, %3\n"  // Move SYS_flock (the system call number) to r7
+    "svc 0x00000000\n"  // Make the system call
+    "mov %[result], r0"  // Move the result from r0 to retval
+    : [result]"=r" (retval)  // Output
+    : "r"(fd), "r"(op), "i"(SYS_flock)  // Inputs
+    : "r0", "r1", "r7"  // Clobber list
+);
+#elif defined(__aarch64__)  // AArch64
+    // XXX: using %w registers for 32-bit movs. This made the compiler
+    // happy but I'm not sure why we can't be operating on 64-bit ints
+    asm volatile(
+    "mov w0, %w1\n"        // Move fd to w0, the first argument for the system call
+    "mov w1, %w2\n"        // Move op to w1, the second argument for the system call
+    "mov x8, %3\n"         // Move SYS_flock (the system call number) to x8
+    "svc 0\n"              // Make the system call (Supervisor Call)
+    "mov %w0, w0\n"        // Move the result from w0 to retval
+    : "=r" (retval)        // Output
+    : "r" (fd), "r" (op), "i" (SYS_flock)  // Inputs
+    : "x0", "x1", "x8"     // Clobber list
+);
+#elif defined(__x86_64__)  // x86_64
+    // XXX: movl's for 32-bit movs. This made the compiler
+    // happy but I'm not sure why we can't be operating on 64-bit ints
+    // I think it should be fine though
+    asm volatile(
+    "movl %1, %%edi\n"       // Move fd to rdi (1st argument)
+    "movl %2, %%esi\n"       // Move op to rsi (2nd argument)
+    "movl %3, %%eax\n"       // Move SYS_flock to rax (syscall number)
+    "syscall\n"             // Make the syscall
+    "movl %%eax, %0\n"       // Move the result from rax to retval
+    : "=r" (retval)         // Output
+    : "r" (fd), "r" (op), "i" (SYS_flock)  // Inputs
+    : "rax", "rdi", "rsi"   // Clobber list
+);
+#elif defined(__i386__)  // x86 32-bit
+    asm volatile(
+    "movl %1, %%ebx\n"      // Move fd to ebx
+    "movl %2, %%ecx\n"      // Move op to ecx
+    "movl %3, %%eax\n"      // Move SYS_flock to eax
+    "int $0x80\n"           // Make the syscall
+    "movl %%eax, %0\n"      // Move the result from eax to retval
+    : "=r" (retval)         // Output
+    : "r" (fd), "r" (op), "i" (SYS_flock)  // Inputs
+    : "eax", "ebx", "ecx"   // Clobber list
+);
+#else
+#error "Unsupported architecture"
+#endif
+    return retval;
+}
+
+
 static int _libinject_dir_lock() {
     int dirfd;
     // If not initialized, check for existing mount before triggering NVRAM init
@@ -56,37 +139,6 @@ static void _libinject_dir_unlock(int dirfd) {
     }
     close(dirfd);
     return;
-}
-
-int _libinject_flock_asm(int fd, int op) {
-    int retval;
-#if defined(__mips__)
-    asm volatile(
-    "move $a0, %1\n"        // Correctly move fd (from C variable) to $a0
-    "move $a1, %2\n"        // Correctly move op (from C variable) to $a1
-    "li $v0, %3\n"          // Load the syscall number for flock into $v0
-    "syscall\n"             // Perform the syscall
-    "move %0, $v0"          // Move the result from $v0 to retval
-    : "=r" (retval)         // Output
-    : "r" (fd), "r" (op), "i" (SYS_flock) // Inputs; "i" for immediate syscall number
-    : "v0", "a0", "a1"      // Clobber list
-);
-#elif defined(__arm__)
-    asm volatile(
-    "mov r0, %1\n"  // Move fd to r0, the first argument for the system call
-    "mov r1, %2\n"  // Move op to r1, the second argument for the system call
-    "mov r7, %3\n"  // Move SYS_flock (the system call number) to r7
-    "svc 0x00000000\n"  // Make the system call
-    "mov %[result], r0"  // Move the result from r0 to retval
-    : [result]"=r" (retval)  // Output
-    : "r"(fd), "r"(op), "i"(SYS_flock)  // Inputs
-    : "r0", "r1", "r7"  // Clobber list
-);
-#else
-#error "Unsupported architecture"
-
-#endif
-    return retval;
 }
 
 int libinject_ret_1() {
