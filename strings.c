@@ -3,22 +3,11 @@
 
 #include "strings.h"
 
-// ENUM for sources: strcmp, strncmp, getenv
-enum source {
-    STRCMP,
-    STRNCMP,
-    GETENV
-};
-typedef struct {
-    enum source source;
-    const char* value;
-} match;
-
-void igloo_page_in_str(volatile const char *s) {
+void _libinject_page_in_str(volatile const char *s) {
     while (*s++);
 }
 
-void log_match(match m) {
+void _libinject_log_match(match m) {
     int cmd = -1;
     switch (m.source) {
         case STRCMP:
@@ -32,21 +21,21 @@ void log_match(match m) {
             break;
     }
 
-    int rv = igloo_hypercall2(cmd, (unsigned long)m.value, minimal_strlen(m.value));
+    int rv = igloo_hypercall2(cmd, (unsigned long)m.value, _libinject_minimal_strlen(m.value));
     while (rv == 1) {
         PAGE_IN(m.value);
-        rv = igloo_hypercall2(cmd, (unsigned long)m.value, minimal_strlen(m.value));
+        rv = igloo_hypercall2(cmd, (unsigned long)m.value, _libinject_minimal_strlen(m.value));
     }
 }
 
 // Simple string length calculation
-size_t minimal_strlen(const char *s) {
+size_t _libinject_minimal_strlen(const char *s) {
     size_t len = 0;
     while (s[len]) ++len;
     return len;
 }
 
-int minimal_strcmp(const char *s1, const char *s2, short do_log) {
+int _libinject_minimal_strcmp(const char *s1, const char *s2, short do_log) {
     size_t i = 0;
     while (s1[i] && s2[i]) {
         if (s1[i] != s2[i]) {
@@ -56,10 +45,10 @@ int minimal_strcmp(const char *s1, const char *s2, short do_log) {
     }
     if (do_log) {
         // Additional logic to log if TARGET_VALUE is present
-        if (minimal_strncmp(0, sizeof(TARGET_VALUE), s1, TARGET_VALUE) == 0) {
-            log_match((match) {STRCMP, s2});
-        } else if (minimal_strncmp(0, sizeof(TARGET_VALUE), s2, TARGET_VALUE) == 0) {
-            log_match((match) {STRCMP, s1});
+        if (_libinject_minimal_strncmp(0, sizeof(TARGET_VALUE), s1, TARGET_VALUE) == 0) {
+            _libinject_log_match((match) {STRCMP, s2});
+        } else if (_libinject_minimal_strncmp(0, sizeof(TARGET_VALUE), s2, TARGET_VALUE) == 0) {
+            _libinject_log_match((match) {STRCMP, s1});
         }
     }
     return s1[i] - s2[i];
@@ -67,15 +56,15 @@ int minimal_strcmp(const char *s1, const char *s2, short do_log) {
 
 // XXX: weird arg order here which is critical - we don't want our dynamic analysis to
 // detect function calls with DYNVAL in arg1 or arg2.
-int minimal_strncmp(short do_log, size_t n, const char *s1, const char *s2) {
+int _libinject_minimal_strncmp(short do_log, size_t n, const char *s1, const char *s2) {
     for (size_t i = 0; i < n; ++i) {
         if (s1[i] != s2[i] || !s1[i]) {
             // Additional logic to log if TARGET_VALUE is present
             if (do_log) {
-                if (minimal_strncmp(0, sizeof(TARGET_VALUE), s1, TARGET_VALUE) == 0) {
-                    log_match((match) {STRNCMP, s2});
-                } else if (minimal_strncmp(0, sizeof(TARGET_VALUE), s2, TARGET_VALUE) == 0) {
-                    log_match((match) {STRNCMP, s1});
+                if (_libinject_minimal_strncmp(0, sizeof(TARGET_VALUE), s1, TARGET_VALUE) == 0) {
+                    _libinject_log_match((match) {STRNCMP, s2});
+                } else if (_libinject_minimal_strncmp(0, sizeof(TARGET_VALUE), s2, TARGET_VALUE) == 0) {
+                    _libinject_log_match((match) {STRNCMP, s1});
                 }
             }
             return s1[i] - s2[i];
@@ -84,38 +73,38 @@ int minimal_strncmp(short do_log, size_t n, const char *s1, const char *s2) {
     return 0;
 }
 
-int strcmp(const char *s1, const char *s2) {
-    return minimal_strcmp(s1, s2, 1);
+int libinject_strcmp(const char *s1, const char *s2) {
+    return _libinject_minimal_strcmp(s1, s2, 1);
 }
 
-int strncmp(const char *s1, const char *s2, size_t n) {
-    return minimal_strncmp(1, n, s1, s2);
+int libinject_strncmp(const char *s1, const char *s2, size_t n) {
+    return _libinject_minimal_strncmp(1, n, s1, s2);
 }
 
-char *minimal_getenv(const char *name) {
-    size_t len = minimal_strlen(name);
+char *_libinject_minimal_getenv(const char *name) {
+    size_t len = _libinject_minimal_strlen(name);
     for (char **env = environ; *env; ++env) {
-        if (minimal_strncmp(0, len, *env, name) == 0 && (*env)[len] == '=') {
+        if (_libinject_minimal_strncmp(0, len, *env, name) == 0 && (*env)[len] == '=') {
             return *env + len + 1; // Return the value part of the KEY=value pair
         }
     }
     return NULL; // Not found
 }
 
-char *getenv(const char *name) {
+char *libinject_getenv(const char *name) {
     // Call the original getenv
-    char *result = minimal_getenv(name);
+    char *result = _libinject_minimal_getenv(name);
 
     // if the first len(TARGET_VALUE) characters of result match our target, log it
-    if (result && minimal_strncmp(0, minimal_strlen(result), result, TARGET_VALUE) == 0) {
-        log_match((match) {GETENV, name});
+    if (result && _libinject_minimal_strncmp(0, _libinject_minimal_strlen(result), result, TARGET_VALUE) == 0) {
+        _libinject_log_match((match) {GETENV, name});
     }
 
     // Return the original result
     return result;
 }
 
-char *strstr(const char *haystack, const char *needle) {
+char *libinject_strstr(const char *haystack, const char *needle) {
     if (!haystack || !needle) return NULL;
 
     // It's not actually a match - strstr is a bit more
@@ -147,6 +136,5 @@ char *strstr(const char *haystack, const char *needle) {
 
     return NULL;
 }
-
 
 #endif

@@ -32,65 +32,96 @@ static int init = 0;
 static char temp[BUFFER_SIZE];
 #define FIRMAE_NVRAM 1
 
-static int dir_lock() {
+static int _libinject_dir_lock() {
     int dirfd;
     // If not initialized, check for existing mount before triggering NVRAM init
     if (!init) {
         PRINT_MSG("%s\n", "Triggering NVRAM initialization!");
-        nvram_init();
+        libinject_nvram_init();
     }
 
     dirfd = open(MOUNT_POINT, O_DIRECTORY | O_RDONLY);
     if(dirfd < 0) {
        PRINT_MSG("Couldn't open %s\n", MOUNT_POINT);
     }
-    if(flock_asm(dirfd,LOCK_EX) < 0) {
+    if(_libinject_flock_asm(dirfd,LOCK_EX) < 0) {
        PRINT_MSG("Couldn't lock %s\n", MOUNT_POINT);
     }
     return dirfd;
 }
 
-static void dir_unlock(int dirfd) {
-    if(flock_asm(dirfd,LOCK_UN) < 0) {
+static void _libinject_dir_unlock(int dirfd) {
+    if(_libinject_flock_asm(dirfd,LOCK_UN) < 0) {
        PRINT_MSG("Couldn't unlock %s\n", MOUNT_POINT);
     }
     close(dirfd);
     return;
 }
 
-int true() {
-    return E_SUCCESS; //1
+int _libinject_flock_asm(int fd, int op) {
+    int retval;
+#if defined(__mips__)
+    asm volatile(
+    "move $a0, %1\n"        // Correctly move fd (from C variable) to $a0
+    "move $a1, %2\n"        // Correctly move op (from C variable) to $a1
+    "li $v0, %3\n"          // Load the syscall number for flock into $v0
+    "syscall\n"             // Perform the syscall
+    "move %0, $v0"          // Move the result from $v0 to retval
+    : "=r" (retval)         // Output
+    : "r" (fd), "r" (op), "i" (SYS_flock) // Inputs; "i" for immediate syscall number
+    : "v0", "a0", "a1"      // Clobber list
+);
+#elif defined(__arm__)
+    asm volatile(
+    "mov r0, %1\n"  // Move fd to r0, the first argument for the system call
+    "mov r1, %2\n"  // Move op to r1, the second argument for the system call
+    "mov r7, %3\n"  // Move SYS_flock (the system call number) to r7
+    "svc 0x00000000\n"  // Make the system call
+    "mov %[result], r0"  // Move the result from r0 to retval
+    : [result]"=r" (retval)  // Output
+    : "r"(fd), "r"(op), "i"(SYS_flock)  // Inputs
+    : "r0", "r1", "r7"  // Clobber list
+);
+#else
+#error "Unsupported architecture"
+
+#endif
+    return retval;
 }
 
-int false() {
+int libinject_ret_1() {
+    return E_SUCCESS; // 1
+}
+
+int libinject_ret_0() {
     return E_FAILURE; // 0
 }
 
-int true1(char* a1) {
+int libinject_ret_1_arg(char* a1) {
     return E_SUCCESS; //1
 }
 
-int false1(char* a1) {
+int libinject_ret_0_arg(char* a1) {
     return E_FAILURE; // 0
 }
 
 
-int nvram_init(void) {
+int libinject_nvram_init(void) {
     init = 1;
     return E_SUCCESS;
 }
 
-int nvram_reset(void) {
+int libinject_nvram_reset(void) {
     PRINT_MSG("%s\n", "Reseting NVRAM...");
 
-    if (nvram_clear() != E_SUCCESS) {
+    if (libinject_nvram_clear() != E_SUCCESS) {
         PRINT_MSG("%s\n", "Unable to clear NVRAM!");
         return E_FAILURE;
     }
     return E_SUCCESS;
 }
 
-int nvram_clear(void) {
+int libinject_nvram_clear(void) {
     char path[PATH_MAX] = MOUNT_POINT;
     struct dirent *entry;
     int ret = E_SUCCESS;
@@ -100,10 +131,10 @@ int nvram_clear(void) {
 
     PRINT_MSG("%s\n", "Clearing NVRAM...");
 
-    dirfd = dir_lock();
+    dirfd = _libinject_dir_lock();
 
     if (!(dir = opendir(MOUNT_POINT))) {
-        dir_unlock(dirfd);
+        _libinject_dir_unlock(dirfd);
         PRINT_MSG("Unable to open directory %s!\n", MOUNT_POINT);
         return E_FAILURE;
     }
@@ -132,22 +163,22 @@ int nvram_clear(void) {
     }
 
     closedir(dir);
-    dir_unlock(dirfd);
+    _libinject_dir_unlock(dirfd);
     return ret;
 }
 
-int nvram_close(void) {
+int libinject_nvram_close(void) {
     PRINT_MSG("%s\n", "Closing NVRAM...");
     return E_SUCCESS;
 }
 
-int nvram_list_add(const char *key, const char *val) {
+int libinject_nvram_list_add(const char *key, const char *val) {
     char *pos;
 
     PRINT_MSG("%s = %s + %s\n", val, temp, key);
 
-    if (nvram_get_buf(key, temp, BUFFER_SIZE) != E_SUCCESS) {
-        return nvram_set(key, val);
+    if (libinject_nvram_get_buf(key, temp, BUFFER_SIZE) != E_SUCCESS) {
+        return libinject_nvram_set(key, val);
     }
 
     if (!key || !val) {
@@ -159,7 +190,7 @@ int nvram_list_add(const char *key, const char *val) {
     }
 
     // This will overwrite the temp buffer, but it is OK
-    if (nvram_list_exist(key, val, LIST_MAGIC) != NULL) {
+    if (libinject_nvram_list_exist(key, val, LIST_MAGIC) != NULL) {
         return E_SUCCESS;
     }
 
@@ -173,13 +204,13 @@ int nvram_list_add(const char *key, const char *val) {
         return E_FAILURE;
     }
 
-    return nvram_set(key, temp);
+    return libinject_nvram_set(key, temp);
 }
 
-char *nvram_list_exist(const char *key, const char *val, int magic) {
+char *libinject_nvram_list_exist(const char *key, const char *val, int magic) {
     char *pos = NULL;
 
-    if (nvram_get_buf(key, temp, BUFFER_SIZE) != E_SUCCESS) {
+    if (libinject_nvram_get_buf(key, temp, BUFFER_SIZE) != E_SUCCESS) {
         return E_FAILURE;
     }
 
@@ -198,10 +229,10 @@ char *nvram_list_exist(const char *key, const char *val, int magic) {
     return (magic == LIST_MAGIC) ? NULL : (char *) E_FAILURE;
 }
 
-int nvram_list_del(const char *key, const char *val) {
+int libinject_nvram_list_del(const char *key, const char *val) {
     char *pos;
 
-    if (nvram_get_buf(key, temp, BUFFER_SIZE) != E_SUCCESS) {
+    if (libinject_nvram_get_buf(key, temp, BUFFER_SIZE) != E_SUCCESS) {
         return E_SUCCESS;
     }
 
@@ -212,16 +243,16 @@ int nvram_list_del(const char *key, const char *val) {
     }
 
     // This will overwrite the temp buffer, but it is OK.
-    if ((pos = nvram_list_exist(key, val, LIST_MAGIC))) {
+    if ((pos = libinject_nvram_list_exist(key, val, LIST_MAGIC))) {
         while (*pos && *pos != LIST_SEP[0]) {
             *pos++ = LIST_SEP[0];
         }
     }
 
-    return nvram_set(key, temp);
+    return libinject_nvram_set(key, temp);
 }
 
-char *nvram_get(const char *key) {
+char *libinject_nvram_get(const char *key) {
 // Some routers pass the key as the second argument, instead of the first.
 // We attempt to fix this directly in assembly for MIPS if the key is NULL.
 #if defined(mips)
@@ -229,17 +260,16 @@ char *nvram_get(const char *key) {
         asm ("move %0, $a1" :"=r"(key));
     }
 #endif
-
-    return (nvram_get_buf(key, temp, BUFFER_SIZE) == E_SUCCESS) ? strndup(temp, BUFFER_SIZE) : NULL;
+    return (libinject_nvram_get_buf(key, temp, BUFFER_SIZE) == E_SUCCESS) ? strndup(temp, BUFFER_SIZE) : NULL;
 }
 
-char *nvram_safe_get(const char *key) {
-    char* ret = nvram_get(key);
+char *libinject_nvram_safe_get(const char *key) {
+    char* ret = libinject_nvram_get(key);
     return ret ? ret : strdup("");
 }
 
-char *nvram_default_get(const char *key, const char *val) {
-    char *ret = nvram_get(key);
+char *libinject_nvram_default_get(const char *key, const char *val) {
+    char *ret = libinject_nvram_get(key);
 
     PRINT_MSG("%s = %s || %s\n", key, ret, val);
 
@@ -247,14 +277,14 @@ char *nvram_default_get(const char *key, const char *val) {
         return ret;
     }
 
-    if (val && nvram_set(key, val)) {
-        return nvram_get(key);
+    if (val && libinject_nvram_set(key, val)) {
+        return libinject_nvram_get(key);
     }
 
     return NULL;
 }
 
-int nvram_get_buf(const char *key, char *buf, size_t sz) {
+int libinject_nvram_get_buf(const char *key, char *buf, size_t sz) {
     char path[PATH_MAX] = MOUNT_POINT;
     FILE *f;
     int dirfd;
@@ -289,12 +319,12 @@ int nvram_get_buf(const char *key, char *buf, size_t sz) {
 #endif
     }
 
-    dirfd = dir_lock();
+    dirfd = _libinject_dir_lock();
 
     if ((f = fopen(path, "rb")) == NULL) {
         // We just checked without the lock, but it's empty after we took the lock
         // Someone must have just deleted it. Slow path but not wrong.
-        dir_unlock(dirfd);
+        _libinject_dir_unlock(dirfd);
         PRINT_MSG("Unable to open key: %s! Set default value to \"\"\n", path);
 
         rv = igloo_hypercall2(107, (unsigned long)path, strlen(path));
@@ -334,14 +364,14 @@ int nvram_get_buf(const char *key, char *buf, size_t sz) {
     }
 
     fclose(f);
-    dir_unlock(dirfd);
+    _libinject_dir_unlock(dirfd);
 
     PRINT_MSG("= \"%s\"\n", buf);
 
     return E_SUCCESS;
 }
 
-int nvram_get_int(const char *key) {
+int libinject_nvram_get_int(const char *key) {
     char path[PATH_MAX] = MOUNT_POINT;
     FILE *f;
     char buf[32]; // Buffer to store ASCII representation of the integer
@@ -362,11 +392,11 @@ int nvram_get_int(const char *key) {
         return E_FAILURE;
     }
 
-    dirfd = dir_lock();
+    dirfd = _libinject_dir_lock();
 
     // Try to open the file
     if ((f = fopen(path, "rb")) == NULL) {
-        dir_unlock(dirfd);
+        _libinject_dir_unlock(dirfd);
         PRINT_MSG("Unable to open key: %s!\n", path);
         return E_FAILURE;
     }
@@ -386,26 +416,26 @@ int nvram_get_int(const char *key) {
             if (fread(&ret, sizeof(ret), 1, f) != 1) {
                 PRINT_MSG("Unable to read key as binary int: %s!\n", path);
                 fclose(f);
-                dir_unlock(dirfd);
+                _libinject_dir_unlock(dirfd);
                 return E_FAILURE;
             }
         }
     } else {
         fclose(f);
-        dir_unlock(dirfd);
+        _libinject_dir_unlock(dirfd);
         PRINT_MSG("Unable to read key: %s!\n", path);
         return E_FAILURE;
     }
 
     fclose(f);
-    dir_unlock(dirfd);
+    _libinject_dir_unlock(dirfd);
 
     PRINT_MSG("= %d\n", ret);
 
     return ret;
 }
 
-int nvram_getall(char *buf, size_t len) {
+int libinject_nvram_getall(char *buf, size_t len) {
     char path[PATH_MAX] = MOUNT_POINT;
     struct dirent *entry;
     size_t pos = 0, ret;
@@ -418,10 +448,10 @@ int nvram_getall(char *buf, size_t len) {
         return E_FAILURE;
     }
 
-    dirfd = dir_lock();
+    dirfd = _libinject_dir_lock();
 
     if (!(dir = opendir(MOUNT_POINT))) {
-        dir_unlock(dirfd);
+        _libinject_dir_unlock(dirfd);
         PRINT_MSG("Unable to open directory %s!\n", MOUNT_POINT);
         return E_FAILURE;
     }
@@ -436,7 +466,7 @@ int nvram_getall(char *buf, size_t len) {
 
         if ((ret = snprintf(buf + pos, len - pos, "%s=", entry->d_name)) != strlen(entry->d_name) + 1) {
             closedir(dir);
-            dir_unlock(dirfd);
+            _libinject_dir_unlock(dirfd);
             PRINT_MSG("Unable to append key %s!\n", buf + pos);
             return E_FAILURE;
         }
@@ -445,7 +475,7 @@ int nvram_getall(char *buf, size_t len) {
 
         if ((f = fopen(path, "rb")) == NULL) {
             closedir(dir);
-            dir_unlock(dirfd);
+            _libinject_dir_unlock(dirfd);
             PRINT_MSG("Unable to open key: %s!\n", path);
             return E_FAILURE;
         }
@@ -454,7 +484,7 @@ int nvram_getall(char *buf, size_t len) {
         if (ferror(f)) {
             fclose(f);
             closedir(dir);
-            dir_unlock(dirfd);
+            _libinject_dir_unlock(dirfd);
             PRINT_MSG("Unable to read key: %s!\n", path);
             return E_FAILURE;
         }
@@ -467,11 +497,11 @@ int nvram_getall(char *buf, size_t len) {
     }
 
     closedir(dir);
-    dir_unlock(dirfd);
+    _libinject_dir_unlock(dirfd);
     return E_SUCCESS;
 }
 
-int nvram_set(const char *key, const char *val) {
+int libinject_nvram_set(const char *key, const char *val) {
     char path[PATH_MAX] = MOUNT_POINT;
     FILE *f;
     int dirfd;
@@ -492,28 +522,28 @@ int nvram_set(const char *key, const char *val) {
         rv = igloo_hypercall2(109, (unsigned long)path, (unsigned long)val);
     }
 
-    dirfd = dir_lock();
+    dirfd = _libinject_dir_lock();
 
     if ((f = fopen(path, "wb")) == NULL) {
-        dir_unlock(dirfd);
+        _libinject_dir_unlock(dirfd);
         PRINT_MSG("Unable to open key: %s!\n", path);
         return E_FAILURE;
     }
 
     if (fwrite(val, sizeof(*val), strlen(val), f) != strlen(val)) {
         fclose(f);
-        dir_unlock(dirfd);
+        _libinject_dir_unlock(dirfd);
         PRINT_MSG("Unable to write value: %s to key: %s!\n", val, path);
         return E_FAILURE;
     }
     PRINT_MSG("Wrote value: %s to key: %s!\n", val, path);
 
     fclose(f);
-    dir_unlock(dirfd);
+    _libinject_dir_unlock(dirfd);
     return E_SUCCESS;
 }
 
-int nvram_set_int(const char *key, const int val) {
+int libinject_nvram_set_int(const char *key, const int val) {
     char path[PATH_MAX] = MOUNT_POINT;
     FILE *f;
     int dirfd;
@@ -527,27 +557,27 @@ int nvram_set_int(const char *key, const int val) {
 
     strncat(path, key, ARRAY_SIZE(path) - ARRAY_SIZE(MOUNT_POINT) - 1);
 
-    dirfd = dir_lock();
+    dirfd = _libinject_dir_lock();
 
     if ((f = fopen(path, "wb")) == NULL) {
-        dir_unlock(dirfd);
+        _libinject_dir_unlock(dirfd);
         PRINT_MSG("Unable to open key: %s!\n", path);
         return E_FAILURE;
     }
 
     if (fwrite(&val, sizeof(val), 1, f) != 1) {
         fclose(f);
-        dir_unlock(dirfd);
+        _libinject_dir_unlock(dirfd);
         PRINT_MSG("Unable to write value: %d to key: %s!\n", val, path);
         return E_FAILURE;
     }
 
     fclose(f);
-    dir_unlock(dirfd);
+    _libinject_dir_unlock(dirfd);
     return E_SUCCESS;
 }
 
-int nvram_unset(const char *key) {
+int libinject_nvram_unset(const char *key) {
     char path[PATH_MAX] = MOUNT_POINT;
     int dirfd;
     int rv;
@@ -567,32 +597,32 @@ int nvram_unset(const char *key) {
         rv = igloo_hypercall2(110, (unsigned long)path, strlen(path));
     }
 
-    dirfd = dir_lock();
+    dirfd = _libinject_dir_lock();
     if (unlink(path) == -1 && errno != ENOENT) {
-        dir_unlock(dirfd);
+        _libinject_dir_unlock(dirfd);
         PRINT_MSG("Unable to unlink %s!\n", path);
         return E_FAILURE;
     }
-    dir_unlock(dirfd);
+    _libinject_dir_unlock(dirfd);
     return E_SUCCESS;
 }
 
-int nvram_safe_unset(const char *key) {
+int libinject_nvram_safe_unset(const char *key) {
     // If we have a value for this key, unset it. Otherwise no-op
     // Always return E_SUCCESS(?)
-    if (nvram_get_buf(key, temp, BUFFER_SIZE) == E_SUCCESS) {
-      nvram_unset(key);
+    if (libinject_nvram_get_buf(key, temp, BUFFER_SIZE) == E_SUCCESS) {
+      libinject_nvram_unset(key);
     }
     return E_SUCCESS;
 }
 
-int nvram_match(const char *key, const char *val) {
+int libinject_nvram_match(const char *key, const char *val) {
     if (!key) {
         PRINT_MSG("%s\n", "NULL key!");
         return E_FAILURE;
     }
 
-    if (nvram_get_buf(key, temp, BUFFER_SIZE) != E_SUCCESS) {
+    if (libinject_nvram_get_buf(key, temp, BUFFER_SIZE) != E_SUCCESS) {
         return !val ? E_SUCCESS : E_FAILURE;
     }
 
@@ -607,26 +637,26 @@ int nvram_match(const char *key, const char *val) {
     return E_SUCCESS;
 }
 
-int nvram_invmatch(const char *key, const char *val) {
+int libinject_nvram_invmatch(const char *key, const char *val) {
     if (!key) {
         PRINT_MSG("%s\n", "NULL key!");
         return E_FAILURE;
     }
 
     PRINT_MSG("%s ~?= \"%s\"\n", key, val);
-    return !nvram_match(key, val);
+    return !libinject_nvram_match(key, val);
 }
 
-int nvram_commit(void) {
+int libinject_nvram_commit(void) {
     int dirfd;
-    dirfd = dir_lock();
+    dirfd = _libinject_dir_lock();
     sync();
-    dir_unlock(dirfd);
+    _libinject_dir_unlock(dirfd);
 
     return E_SUCCESS;
 }
 
-int parse_nvram_from_file(const char *file)
+int libinject_parse_nvram_from_file(const char *file)
 {
     FILE *f;
     char *buffer;
@@ -669,7 +699,7 @@ int parse_nvram_from_file(const char *file)
         }
         if (!memcmp(tmp,"\x00",1)){
             key = larr; val = rarr;
-            nvram_set(key, val);
+            libinject_nvram_set(key, val);
             j=0; k=0; left=1;
             memset(larr, 0, LEN); memset(rarr, 0, LEN);
         }
@@ -679,126 +709,127 @@ int parse_nvram_from_file(const char *file)
 
 /* Atheros/Broadcom NVRAM */
 
-int nvram_get_nvramspace(void) {
+int libinject_nvram_get_nvramspace(void) {
     return NVRAM_SIZE;
 }
 
 
-char *nvram_nget(const char *fmt, ...) {
+char *libinject_nvram_nget(const char *fmt, ...) {
     va_list va;
 
     va_start(va, fmt);
     vsnprintf(temp, BUFFER_SIZE, fmt, va);
     va_end(va);
 
-    return nvram_get(temp);
+    return libinject_nvram_get(temp);
 }
 
-int nvram_nset(const char *val, const char *fmt, ...) {
+int libinject_nvram_nset(const char *val, const char *fmt, ...) {
     va_list va;
 
     va_start(va, fmt);
     vsnprintf(temp, BUFFER_SIZE, fmt, va);
     va_end(va);
 
-    return nvram_set(temp, val);
+    return libinject_nvram_set(temp, val);
 }
 
-int nvram_nset_int(const int val, const char *fmt, ...) {
+int libinject_nvram_nset_int(const int val, const char *fmt, ...) {
     va_list va;
 
     va_start(va, fmt);
     vsnprintf(temp, BUFFER_SIZE, fmt, va);
     va_end(va);
 
-    return nvram_set_int(temp, val);
+    return libinject_nvram_set_int(temp, val);
 }
 
-int nvram_nmatch(const char *val, const char *fmt, ...) {
+int libinject_nvram_nmatch(const char *val, const char *fmt, ...) {
     va_list va;
 
     va_start(va, fmt);
     vsnprintf(temp, BUFFER_SIZE, fmt, va);
     va_end(va);
 
-    return nvram_match(temp, val);
+    return libinject_nvram_match(temp, val);
 }
 
 /* Realtek */
-int apmib_get(const int key, void *buf) {
+int libinject_apmib_get(const int key, void *buf) {
     int res;
 
     snprintf(temp, BUFFER_SIZE, "%d", key);
-    if ((res = nvram_get_int(temp))) {
+    if ((res = libinject_nvram_get_int(temp))) {
         (*(int32_t *) buf) = res;
     }
 
     return res;
 }
 
-int apmib_set(const int key, void *buf) {
+int libinject_apmib_set(const int key, void *buf) {
     snprintf(temp, BUFFER_SIZE, "%d", key);
-    return nvram_set_int(temp, ((int32_t *) buf)[0]);
+    return libinject_nvram_set_int(temp, ((int32_t *) buf)[0]);
 }
 
 /* Netgear ACOS */
 
-int WAN_ith_CONFIG_GET(char *buf, const char *fmt, ...) {
+int libinject_WAN_ith_CONFIG_GET(char *buf, const char *fmt, ...) {
     va_list va;
 
     va_start(va, fmt);
     vsnprintf(temp, BUFFER_SIZE, fmt, va);
     va_end(va);
 
-    return nvram_get_buf(temp, buf, USER_BUFFER_SIZE);
+    return libinject_nvram_get_buf(temp, buf, USER_BUFFER_SIZE);
 }
 
 /* ZyXel / Edimax */
 // many functions expect the opposite return values: (0) success, failure (1/-1)
 
-int nvram_getall_adv(int unk, char *buf, size_t len) {
-    return nvram_getall(buf, len) == E_SUCCESS ? E_FAILURE : E_SUCCESS;
+int libinject_nvram_getall_adv(int unk, char *buf, size_t len) {
+    return libinject_nvram_getall(buf, len) == E_SUCCESS ? E_FAILURE : E_SUCCESS;
 }
 
-char *nvram_get_adv(int unk, const char *key) {
-    return nvram_get(key);
+char *libinject_nvram_get_adv(int unk, const char *key) {
+    return libinject_nvram_get(key);
 }
 
-int nvram_set_adv(int unk, const char *key, const char *val) {
-    return nvram_set(key, val);
+int libinject_nvram_set_adv(int unk, const char *key, const char *val) {
+    return libinject_nvram_set(key, val);
 }
 
-int nvram_state(int unk1, void *unk2, void *unk3) {
+int libinject_nvram_state(int unk1, void *unk2, void *unk3) {
     return E_FAILURE;
 }
 
-int envram_commit(void) {
-    return !nvram_commit();
+int libinject_envram_commit(void) {
+    return !libinject_nvram_commit();
 }
 
-int envram_default(void) {
+int libinject_envram_default(void) {
     return E_FAILURE;
 }
 
-int envram_load(void)  {
-    return !nvram_init();
+int libinject_envram_load(void)  {
+    return !libinject_nvram_init();
 }
 
-int envram_safe_load(void)  {
-    return !nvram_init();
+int libinject_envram_safe_load(void)  {
+    return !libinject_nvram_init();
 }
 
-int envram_match(const char *key, const char *val)  {
-    return !nvram_match(key, val);
+int libinject_envram_match(const char *key, const char *val)  {
+    return !libinject_nvram_match(key, val);
 }
 
-int envram_get(const char* key, char *buf) {
+int libinject_envram_get(const char* key, char *buf) {
     // may be incorrect
-    return !nvram_get_buf(key, buf, USER_BUFFER_SIZE);
+    return !libinject_nvram_get_buf(key, buf, USER_BUFFER_SIZE);
 }
-int envram_getf(const char* key, const char *fmt, ...) {
+
+int libinject_envram_getf(const char* key, const char *fmt, ...) {
     va_list va;
-    char *val = nvram_get(key);
+    char *val = libinject_nvram_get(key);
 
     if (!val) {
         return !E_SUCCESS;
@@ -812,32 +843,32 @@ int envram_getf(const char* key, const char *fmt, ...) {
     return !E_FAILURE;
 }
 
-int envram_set(const char *key, const char *val) {
-    return !nvram_set(key, val);
+int libinject_envram_set(const char *key, const char *val) {
+    return !libinject_nvram_set(key, val);
 }
 
-int envram_setf(const char* key, const char* fmt, ...) {
+int libinject_envram_setf(const char* key, const char* fmt, ...) {
     va_list va;
 
     va_start(va, fmt);
     vsnprintf(temp, BUFFER_SIZE, fmt, va);
     va_end(va);
 
-    return !nvram_set(key, temp);
+    return !libinject_nvram_set(key, temp);
 }
 
-int envram_unset(const char *key) {
-    return !nvram_unset(key);
+int libinject_envram_unset(const char *key) {
+    return !libinject_nvram_unset(key);
 }
 
 /* Ralink */
 
-char *nvram_bufget(int idx, const char *key) {
-    return nvram_safe_get(key);
+char *libinject_nvram_bufget(int idx, const char *key) {
+    return libinject_nvram_safe_get(key);
 }
 
-int nvram_bufset(int idx, const char *key, const char *val) {
-    return nvram_set(key, val);
+int libinject_nvram_bufset(int idx, const char *key, const char *val) {
+    return libinject_nvram_set(key, val);
 }
 
 // Hack to use static variables in shared library
