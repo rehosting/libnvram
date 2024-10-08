@@ -399,7 +399,7 @@ int libinject_nvram_get_buf(const char *key, char *buf, size_t sz) {
     }
     else
     {
-        PRINT_MSG("\n\n[NVRAM] %d %s\n\n", strlen(key), key);
+        PRINT_MSG("\n\n[NVRAM] %d %s\n\n", (int)strlen(key), key);
 
         // success
         rv = igloo_hypercall2(108, (unsigned long)path, strlen(path));
@@ -726,7 +726,13 @@ int libinject_parse_nvram_from_file(const char *file)
 
     /* Allocate memory */
     buffer = (char*)malloc(sizeof(char) *fileLen);
-    fread(buffer, 1, fileLen, f);
+    int rv = fread(buffer, 1, fileLen, f);
+    if (rv != fileLen) {
+        PRINT_MSG("Unable to read file: %s: %d!\n", file, rv);
+        free(buffer);
+        fclose(f);
+        return E_FAILURE;
+    }
     fclose(f);
 
     /* split the buffer including null byte */
