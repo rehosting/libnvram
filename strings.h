@@ -1,7 +1,7 @@
 #ifndef INCLUDE_STRINGS_H
 #define INCLUDE_STRINGS_H
 
-#include "hypercall.h"
+#include "libhc/hypercall.h"
 #include <stddef.h>
 
 #define PAGE_IN(s) _libinject_page_in_str((volatile const char *)(s))
