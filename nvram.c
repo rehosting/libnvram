@@ -362,6 +362,7 @@ int libinject_nvram_get_buf(const char *key, char *buf, size_t sz) {
 
     // Before taking the lock, check if the key exists, if not bail
     if (access(path, F_OK) != 0) {
+        rv = igloo_hypercall2(107, (unsigned long)path, strlen(path));
 #ifdef FIRMAE_NVRAM
         // Key doesn't exist, set default empty value
         buf[0] = '\0';
