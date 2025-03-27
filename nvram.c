@@ -108,6 +108,39 @@ static int _libinject_flock_asm(int fd, int op) {
     : "r" (fd), "r" (op), "i" (SYS_flock)  // Inputs
     : "eax", "ebx", "ecx"   // Clobber list
 );
+#elif defined(__powerpc__) || defined(__powerpc64__)
+    asm volatile(
+    "mr 3, %1\n"           // Move fd to r3 (1st argument)
+    "mr 4, %2\n"           // Move op to r4 (2nd argument)
+    "li 0, %3\n"           // Load SYS_flock (the system call number) into r0
+    "sc\n"                 // Make the system call
+    "mr %0, 3\n"           // Move the result from r3 to retval
+    : "=r" (retval)        // Output
+    : "r" (fd), "r" (op), "i" (SYS_flock)  // Inputs
+    : "r0", "r3", "r4"     // Clobber list
+);
+#elif defined(__riscv)
+    asm volatile(
+    "mv a0, %1\n"          // Move fd to a0 (1st argument)
+    "mv a1, %2\n"          // Move op to a1 (2nd argument)
+    "li a7, %3\n"          // Load SYS_flock (the system call number) into a7
+    "ecall\n"              // Make the system call
+    "mv %0, a0\n"          // Move the result from a0 to retval
+    : "=r" (retval)        // Output
+    : "r" (fd), "r" (op), "i" (SYS_flock)  // Inputs
+    : "a0", "a1", "a7"     // Clobber list
+);
+#elif defined(__loongarch64)
+    asm volatile(
+    "move $a0, %1\n"       // Move fd to $a0 (1st argument)
+    "move $a1, %2\n"       // Move op to $a1 (2nd argument)
+    "addi.d $a7, $zero, %3\n" // Load SYS_flock (the system call number) into $a7
+    "syscall 0\n"          // Make the system call
+    "move %0, $a0\n"       // Move the result from $a0 to retval
+    : "=r" (retval)        // Output
+    : "r" (fd), "r" (op), "i" (SYS_flock)  // Inputs
+    : "a0", "a1", "a7"     // Clobber list
+);
 #else
 #error "Unsupported architecture"
 #endif
