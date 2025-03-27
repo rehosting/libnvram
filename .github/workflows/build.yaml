@@ -27,7 +27,7 @@ jobs:
           docker run --rm -v $PWD:/app -w /app ghcr.io/rehosting/embedded-toolchains:latest /app/package.sh
 
       - name: Save package
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4.6.2
         with:
           name: libnvram-latest.tar.gz
           path: libnvram-latest.tar.gz
