@@ -49,5 +49,35 @@ mv nvram.o $SCRATCH/nvram.o.i386
 mv libnvram.so $SCRATCH/libnvram.so.i386
 make clean
 
+CC=powerpc-linux-musl-gcc make CFLAGS="-DCONFIG_PPC=1" libnvram.so -C /app
+mv nvram.o $SCRATCH/nvram.o.ppc
+mv libnvram.so $SCRATCH/libnvram.so.ppc
+make clean
+
+CC=powerpcle-linux-musl-gcc make CFLAGS="-DCONFIG_PPC=1" libnvram.so -C /app
+mv nvram.o $SCRATCH/nvram.o.ppcel
+mv libnvram.so $SCRATCH/libnvram.so.ppcel
+make clean
+
+CC=powerpc64-linux-musl-gcc make CFLAGS="-DCONFIG_PPC64=1" libnvram.so -C /app
+mv nvram.o $SCRATCH/nvram.o.ppc64
+mv libnvram.so $SCRATCH/libnvram.so.ppc64
+make clean
+
+CC=powerpc64le-linux-musl-gcc make CFLAGS="-DCONFIG_PPC64=1" libnvram.so -C /app
+mv nvram.o $SCRATCH/nvram.o.ppc64el
+mv libnvram.so $SCRATCH/libnvram.so.ppc64el
+make clean
+
+CC=loongarch64-unknown-linux-gnu-gcc make CFLAGS="-DCONFIG_LOONGARCH64=1" libnvram.so -C /app
+mv nvram.o $SCRATCH/nvram.o.loongarch64
+mv libnvram.so $SCRATCH/libnvram.so.loongarch64
+make clean
+
+CC=riscv64-linux-musl-gcc make CFLAGS="-DCONFIG_RISCV64=1" libnvram.so -C /app
+mv nvram.o $SCRATCH/nvram.o.riscv64
+mv libnvram.so $SCRATCH/libnvram.so.riscv64
+make clean
+
 tar -czvf /app/libnvram-latest.tar.gz -C $(dirname $SCRATCH) libnvram
 rm -rf /app/out
