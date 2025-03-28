@@ -52,8 +52,8 @@ static inline void igloo_hypercall(unsigned long num, unsigned long arg1) {
     );
 
 #elif defined(CONFIG_LOONGARCH) || defined(CONFIG_LOONGARCH64)
-	register unsigned long reg0 asm("a1") = num;
-	register unsigned long reg1 asm("a2") = arg1;
+	register unsigned long reg0 asm("a7") = num;
+	register unsigned long reg1 asm("a0") = arg1;
     
     asm volatile(
         "cpucfg $r0, $r0"
@@ -151,9 +151,9 @@ static inline unsigned long igloo_hypercall2(unsigned long num, unsigned long ar
 
     return reg0;
 #elif defined(CONFIG_LOONGARCH) || defined(CONFIG_LOONGARCH64)
-	register unsigned long reg0 asm("a1") = num;
-	register unsigned long reg1 asm("a2") = arg1;
-	register unsigned long reg2 asm("a3") = arg2;
+	register unsigned long reg0 asm("a7") = num;
+	register unsigned long reg1 asm("a0") = arg1;
+	register unsigned long reg2 asm("a1") = arg2;
     
     asm volatile(
         "cpucfg $r0, $r0"
