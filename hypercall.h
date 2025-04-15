@@ -62,8 +62,8 @@ static inline void igloo_hypercall(unsigned long num, unsigned long arg1) {
         : "memory"  // No clobber
     );
 #elif defined(CONFIG_PPC) || defined(CONFIG_PPC64)
-	register unsigned long reg0 asm("r4") = num;
-	register unsigned long reg1 asm("r5") = arg1;
+	register unsigned long reg0 asm("r0") = num;
+	register unsigned long reg1 asm("r3") = arg1;
 
     asm volatile(
         "xori 10, 10, 0"
@@ -163,9 +163,9 @@ static inline unsigned long igloo_hypercall2(unsigned long num, unsigned long ar
     );
     return reg0;
 #elif defined(CONFIG_PPC) || defined(CONFIG_PPC64)
-	register unsigned long reg0 asm("r4") = num;
-	register unsigned long reg1 asm("r5") = arg1;
-	register unsigned long reg2 asm("r6") = arg2;
+	register unsigned long reg0 asm("r0") = num;
+	register unsigned long reg1 asm("r3") = arg1;
+	register unsigned long reg2 asm("r4") = arg2;
 
     asm volatile(
         "xori 10, 10, 0"
@@ -173,7 +173,7 @@ static inline unsigned long igloo_hypercall2(unsigned long num, unsigned long ar
         : "r"(reg1), "r" (reg2) 
         : "memory"
     );
-    return reg0;
+    return reg1;
 #elif defined(CONFIG_RISCV) || defined(CONFIG_RISCV64)
 	register unsigned long reg0 asm("a0") = num;
 	register unsigned long reg1 asm("a1") = arg1;
