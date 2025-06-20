@@ -630,7 +630,8 @@ int libinject_nvram_set(const char *key, const char *val) {
 }
 
 int libinject_nvram_set_int(const char *key, const int val) {
-    char path[PATH_MAX];
+    size_t path_len = strlen(MOUNT_POINT) + strlen(key) + 1;
+    char *path = malloc(path_len);
     FILE *f;
     int dirfd;
 
@@ -646,15 +647,14 @@ int libinject_nvram_set_int(const char *key, const int val) {
 
     PRINT_MSG("%s = %d\n", truncated_key, val);
 
-    // Use snprintf for safe path construction
-    snprintf(path, sizeof(path), "%s%s", MOUNT_POINT, truncated_key);
-    path[PATH_MAX - 1] = '\0'; // Ensure null-termination
+    snprintf(path, path_len, "%s%s", MOUNT_POINT, truncated_key);
 
     dirfd = _libinject_dir_lock();
 
     if ((f = fopen(path, "wb")) == NULL) {
         _libinject_dir_unlock(dirfd);
         PRINT_MSG("Unable to open key: %s!\n", path);
+        free(path);
         return E_FAILURE;
     }
 
@@ -662,16 +662,19 @@ int libinject_nvram_set_int(const char *key, const int val) {
         fclose(f);
         _libinject_dir_unlock(dirfd);
         PRINT_MSG("Unable to write value: %d to key: %s!\n", val, path);
+        free(path);
         return E_FAILURE;
     }
 
     fclose(f);
     _libinject_dir_unlock(dirfd);
+    free(path);
     return E_SUCCESS;
 }
 
 int libinject_nvram_unset(const char *key) {
-    char path[PATH_MAX] = MOUNT_POINT;
+    size_t path_len = strlen(MOUNT_POINT) + strlen(key) + 1;
+    char *path = malloc(path_len);
     int dirfd;
     int rv;
 
@@ -687,9 +690,7 @@ int libinject_nvram_unset(const char *key) {
 
     PRINT_MSG("%s\n", truncated_key);
 
-    // Use snprintf for safe path construction
-    snprintf(path, sizeof(path), "%s%s", MOUNT_POINT, truncated_key);
-    path[PATH_MAX - 1] = '\0'; // Ensure null-termination
+    snprintf(path, path_len, "%s%s", MOUNT_POINT, truncated_key);
 
     rv = igloo_hypercall2(110, (unsigned long)path, strlen(path));
     while (rv == 1) {
@@ -701,9 +702,11 @@ int libinject_nvram_unset(const char *key) {
     if (unlink(path) == -1 && errno != ENOENT) {
         _libinject_dir_unlock(dirfd);
         PRINT_MSG("Unable to unlink %s!\n", path);
+        free(path);
         return E_FAILURE;
     }
     _libinject_dir_unlock(dirfd);
+    free(path);
     return E_SUCCESS;
 }
 
