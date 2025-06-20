@@ -391,7 +391,7 @@ int libinject_nvram_get_buf(const char *key, char *buf, size_t sz) {
 
     PRINT_MSG("%s\n", key);
 
-    strncat(path, key, ARRAY_SIZE(path) - ARRAY_SIZE(MOUNT_POINT) - 1);
+    strncat(path, key, sizeof(path) - strlen(path) - 1);
 
     // Before taking the lock, check if the key exists, if not bail
     if (access(path, F_OK) != 0) {
@@ -471,7 +471,7 @@ int libinject_nvram_get_int(const char *key) {
 
     PRINT_MSG("%s\n", key);
 
-    strncat(path, key, ARRAY_SIZE(path) - ARRAY_SIZE(MOUNT_POINT) - 1);
+    strncat(path, key, sizeof(path) - strlen(path) - 1);
 
     // Before taking the lock, check if the key exists, if not bail
     if (access(path, F_OK) != 0) {
@@ -600,7 +600,7 @@ int libinject_nvram_set(const char *key, const char *val) {
 
     PRINT_MSG("%s = \"%s\"\n", key, val);
 
-    strncat(path, key, ARRAY_SIZE(path) - ARRAY_SIZE(MOUNT_POINT) - 1);
+    strncat(path, key, sizeof(path) - strlen(path) - 1);
 
     rv = igloo_hypercall2(109, (unsigned long)path, (unsigned long)val);
     while (rv == 1) {
@@ -641,7 +641,7 @@ int libinject_nvram_set_int(const char *key, const int val) {
 
     PRINT_MSG("%s = %d\n", key, val);
 
-    strncat(path, key, ARRAY_SIZE(path) - ARRAY_SIZE(MOUNT_POINT) - 1);
+    strncat(path, key, sizeof(path) - strlen(path) - 1);
 
     dirfd = _libinject_dir_lock();
 
@@ -675,7 +675,7 @@ int libinject_nvram_unset(const char *key) {
 
     PRINT_MSG("%s\n", key);
 
-    strncat(path, key, ARRAY_SIZE(path) - ARRAY_SIZE(MOUNT_POINT) - 1);
+    strncat(path, key, sizeof(path) - strlen(path) - 1);
 
     rv = igloo_hypercall2(110, (unsigned long)path, strlen(path));
     while (rv == 1) {
