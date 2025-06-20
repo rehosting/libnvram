@@ -630,7 +630,7 @@ int libinject_nvram_set(const char *key, const char *val) {
 }
 
 int libinject_nvram_set_int(const char *key, const int val) {
-    char path[PATH_MAX] = MOUNT_POINT;
+    char path[PATH_MAX];
     FILE *f;
     int dirfd;
 
@@ -638,10 +638,17 @@ int libinject_nvram_set_int(const char *key, const int val) {
         PRINT_MSG("%s\n", "NULL key!");
         return E_FAILURE;
     }
+    // Truncate key if too long
+    size_t max_key_len = PATH_MAX - strlen(MOUNT_POINT) - 1;
+    char truncated_key[PATH_MAX];
+    strncpy(truncated_key, key, max_key_len);
+    truncated_key[max_key_len] = '\0';
 
-    PRINT_MSG("%s = %d\n", key, val);
+    PRINT_MSG("%s = %d\n", truncated_key, val);
 
-    strncat(path, key, sizeof(path) - strlen(path) - 1);
+    // Use snprintf for safe path construction
+    snprintf(path, sizeof(path), "%s%s", MOUNT_POINT, truncated_key);
+    path[PATH_MAX - 1] = '\0'; // Ensure null-termination
 
     dirfd = _libinject_dir_lock();
 
@@ -672,10 +679,17 @@ int libinject_nvram_unset(const char *key) {
         PRINT_MSG("%s\n", "NULL key!");
         return E_FAILURE;
     }
+    // Truncate key if too long
+    size_t max_key_len = PATH_MAX - strlen(MOUNT_POINT) - 1;
+    char truncated_key[PATH_MAX];
+    strncpy(truncated_key, key, max_key_len);
+    truncated_key[max_key_len] = '\0';
 
-    PRINT_MSG("%s\n", key);
+    PRINT_MSG("%s\n", truncated_key);
 
-    strncat(path, key, sizeof(path) - strlen(path) - 1);
+    // Use snprintf for safe path construction
+    snprintf(path, sizeof(path), "%s%s", MOUNT_POINT, truncated_key);
+    path[PATH_MAX - 1] = '\0'; // Ensure null-termination
 
     rv = igloo_hypercall2(110, (unsigned long)path, strlen(path));
     while (rv == 1) {
