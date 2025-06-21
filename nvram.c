@@ -258,6 +258,7 @@ int libinject_nvram_close(void) {
 }
 
 int libinject_nvram_list_add(const char *key, const char *val) {
+    memset(temp, 0, BUFFER_SIZE);
     char *pos;
 
     PRINT_MSG("%s = %s + %s\n", val, temp, key);
@@ -293,6 +294,7 @@ int libinject_nvram_list_add(const char *key, const char *val) {
 }
 
 char *libinject_nvram_list_exist(const char *key, const char *val, int magic) {
+    memset(temp, 0, BUFFER_SIZE);
     char *pos = NULL;
 
     if (libinject_nvram_get_buf(key, temp, BUFFER_SIZE) != E_SUCCESS) {
@@ -315,6 +317,7 @@ char *libinject_nvram_list_exist(const char *key, const char *val, int magic) {
 }
 
 int libinject_nvram_list_del(const char *key, const char *val) {
+    memset(temp, 0, BUFFER_SIZE);
     char *pos;
 
     if (libinject_nvram_get_buf(key, temp, BUFFER_SIZE) != E_SUCCESS) {
@@ -345,6 +348,7 @@ char *libinject_nvram_get(const char *key) {
         asm ("move %0, $a1" :"=r"(key));
     }
 #endif
+    memset(temp, 0, BUFFER_SIZE);
     return (libinject_nvram_get_buf(key, temp, BUFFER_SIZE) == E_SUCCESS) ? strndup(temp, BUFFER_SIZE) : NULL;
 }
 
@@ -370,6 +374,8 @@ char *libinject_nvram_default_get(const char *key, const char *val) {
 }
 
 int libinject_nvram_get_buf(const char *key, char *buf, size_t sz) {
+    memset(buf, 0, sz);
+
     char path[PATH_MAX] = MOUNT_POINT;
     FILE *f;
     int dirfd;
@@ -711,8 +717,7 @@ int libinject_nvram_unset(const char *key) {
 }
 
 int libinject_nvram_safe_unset(const char *key) {
-    // If we have a value for this key, unset it. Otherwise no-op
-    // Always return E_SUCCESS(?)
+    memset(temp, 0, BUFFER_SIZE);
     if (libinject_nvram_get_buf(key, temp, BUFFER_SIZE) == E_SUCCESS) {
       libinject_nvram_unset(key);
     }
@@ -720,6 +725,7 @@ int libinject_nvram_safe_unset(const char *key) {
 }
 
 int libinject_nvram_match(const char *key, const char *val) {
+    memset(temp, 0, BUFFER_SIZE);
     if (!key) {
         PRINT_MSG("%s\n", "NULL key!");
         return E_FAILURE;
@@ -835,7 +841,7 @@ char *libinject_nvram_nget(const char *fmt, ...) {
 
 int libinject_nvram_nset(const char *val, const char *fmt, ...) {
     va_list va;
-
+    memset(temp, 0, BUFFER_SIZE);
     va_start(va, fmt);
     vsnprintf(temp, BUFFER_SIZE, fmt, va);
     va_end(va);
@@ -845,7 +851,7 @@ int libinject_nvram_nset(const char *val, const char *fmt, ...) {
 
 int libinject_nvram_nset_int(const int val, const char *fmt, ...) {
     va_list va;
-
+    memset(temp, 0, BUFFER_SIZE);
     va_start(va, fmt);
     vsnprintf(temp, BUFFER_SIZE, fmt, va);
     va_end(va);
@@ -855,7 +861,7 @@ int libinject_nvram_nset_int(const int val, const char *fmt, ...) {
 
 int libinject_nvram_nmatch(const char *val, const char *fmt, ...) {
     va_list va;
-
+    memset(temp, 0, BUFFER_SIZE);
     va_start(va, fmt);
     vsnprintf(temp, BUFFER_SIZE, fmt, va);
     va_end(va);
@@ -866,7 +872,7 @@ int libinject_nvram_nmatch(const char *val, const char *fmt, ...) {
 /* Realtek */
 int libinject_apmib_get(const int key, void *buf) {
     int res;
-
+    memset(temp, 0, BUFFER_SIZE);
     snprintf(temp, BUFFER_SIZE, "%d", key);
     if ((res = libinject_nvram_get_int(temp))) {
         (*(int32_t *) buf) = res;
@@ -876,6 +882,7 @@ int libinject_apmib_get(const int key, void *buf) {
 }
 
 int libinject_apmib_set(const int key, void *buf) {
+    memset(temp, 0, BUFFER_SIZE);
     snprintf(temp, BUFFER_SIZE, "%d", key);
     return libinject_nvram_set_int(temp, ((int32_t *) buf)[0]);
 }
@@ -884,7 +891,7 @@ int libinject_apmib_set(const int key, void *buf) {
 
 int libinject_WAN_ith_CONFIG_GET(char *buf, const char *fmt, ...) {
     va_list va;
-
+    memset(temp, 0, BUFFER_SIZE);
     va_start(va, fmt);
     vsnprintf(temp, BUFFER_SIZE, fmt, va);
     va_end(va);
@@ -958,7 +965,7 @@ int libinject_envram_set(const char *key, const char *val) {
 
 int libinject_envram_setf(const char* key, const char* fmt, ...) {
     va_list va;
-
+    memset(temp, 0, BUFFER_SIZE);
     va_start(va, fmt);
     vsnprintf(temp, BUFFER_SIZE, fmt, va);
     va_end(va);
