@@ -29,7 +29,6 @@
 
 /* Global variables */
 static int init = 0;
-static char temp[BUFFER_SIZE];
 #define FIRMAE_NVRAM 1
 
 static int _libinject_flock_asm(int fd, int op) {
@@ -258,25 +257,31 @@ int libinject_nvram_close(void) {
 }
 
 int libinject_nvram_list_add(const char *key, const char *val) {
+    char *temp = malloc(BUFFER_SIZE);
+    if (!temp) return E_FAILURE;
     memset(temp, 0, BUFFER_SIZE);
     char *pos;
 
     PRINT_MSG("%s = %s + %s\n", val, temp, key);
 
     if (libinject_nvram_get_buf(key, temp, BUFFER_SIZE) != E_SUCCESS) {
+        free(temp);
         return libinject_nvram_set(key, val);
     }
 
     if (!key || !val) {
+        free(temp);
         return E_FAILURE;
     }
 
     if (strlen(temp) + 1 + strlen(val) + 1 > BUFFER_SIZE) {
+        free(temp);
         return E_FAILURE;
     }
 
     // This will overwrite the temp buffer, but it is OK
     if (libinject_nvram_list_exist(key, val, LIST_MAGIC) != NULL) {
+        free(temp);
         return E_SUCCESS;
     }
 
@@ -287,46 +292,59 @@ int libinject_nvram_list_add(const char *key, const char *val) {
     }
 
     if (strcpy(pos, val) != pos) {
+        free(temp);
         return E_FAILURE;
     }
 
-    return libinject_nvram_set(key, temp);
+    int ret = libinject_nvram_set(key, temp);
+    free(temp);
+    return ret;
 }
 
 char *libinject_nvram_list_exist(const char *key, const char *val, int magic) {
+    char *temp = malloc(BUFFER_SIZE);
+    if (!temp) return (magic == LIST_MAGIC) ? NULL : (char *)E_FAILURE;
     memset(temp, 0, BUFFER_SIZE);
     char *pos = NULL;
 
     if (libinject_nvram_get_buf(key, temp, BUFFER_SIZE) != E_SUCCESS) {
-        return E_FAILURE;
+        free(temp);
+        return (magic == LIST_MAGIC) ? NULL : (char *)E_FAILURE;
     }
 
     PRINT_MSG("%s ?in %s (%s)\n", val, key, temp);
 
     if (!val) {
+        free(temp);
         return (magic == LIST_MAGIC) ? NULL : (char *) E_FAILURE;
     }
 
     while ((pos = strtok(!pos ? temp : NULL, LIST_SEP))) {
         if (!strcmp(pos + 1, val)) {
-            return (magic == LIST_MAGIC) ? pos + 1 : (char *) E_SUCCESS;
+            char *result = (magic == LIST_MAGIC) ? pos + 1 : (char *) E_SUCCESS;
+            free(temp);
+            return result;
         }
     }
-
+    free(temp);
     return (magic == LIST_MAGIC) ? NULL : (char *) E_FAILURE;
 }
 
 int libinject_nvram_list_del(const char *key, const char *val) {
+    char *temp = malloc(BUFFER_SIZE);
+    if (!temp) return E_FAILURE;
     memset(temp, 0, BUFFER_SIZE);
     char *pos;
 
     if (libinject_nvram_get_buf(key, temp, BUFFER_SIZE) != E_SUCCESS) {
+        free(temp);
         return E_SUCCESS;
     }
 
     PRINT_MSG("%s = %s - %s\n", key, temp, val);
 
     if (!val) {
+        free(temp);
         return E_FAILURE;
     }
 
@@ -337,7 +355,9 @@ int libinject_nvram_list_del(const char *key, const char *val) {
         }
     }
 
-    return libinject_nvram_set(key, temp);
+    int ret = libinject_nvram_set(key, temp);
+    free(temp);
+    return ret;
 }
 
 char *libinject_nvram_get(const char *key) {
@@ -348,8 +368,12 @@ char *libinject_nvram_get(const char *key) {
         asm ("move %0, $a1" :"=r"(key));
     }
 #endif
+    char *temp = malloc(BUFFER_SIZE);
+    if (!temp) return NULL;
     memset(temp, 0, BUFFER_SIZE);
-    return (libinject_nvram_get_buf(key, temp, BUFFER_SIZE) == E_SUCCESS) ? strndup(temp, BUFFER_SIZE) : NULL;
+    char *result = (libinject_nvram_get_buf(key, temp, BUFFER_SIZE) == E_SUCCESS) ? strndup(temp, BUFFER_SIZE) : NULL;
+    free(temp);
+    return result;
 }
 
 char *libinject_nvram_safe_get(const char *key) {
@@ -375,8 +399,10 @@ char *libinject_nvram_default_get(const char *key, const char *val) {
 
 int libinject_nvram_get_buf(const char *key, char *buf, size_t sz) {
     memset(buf, 0, sz);
-
-    char path[PATH_MAX] = MOUNT_POINT;
+    char *path = malloc(PATH_MAX);
+    if (!path) return E_FAILURE;
+    strncpy(path, MOUNT_POINT, PATH_MAX - 1);
+    path[PATH_MAX - 1] = '\0';
     FILE *f;
     int dirfd;
     int rv;
@@ -397,7 +423,7 @@ int libinject_nvram_get_buf(const char *key, char *buf, size_t sz) {
 
     PRINT_MSG("%s\n", key);
 
-    strncat(path, key, sizeof(path) - strlen(path) - 1);
+    strncat(path, key, PATH_MAX - strlen(path) - 1);
 
     // Before taking the lock, check if the key exists, if not bail
     if (access(path, F_OK) != 0) {
@@ -457,14 +483,17 @@ int libinject_nvram_get_buf(const char *key, char *buf, size_t sz) {
 
     fclose(f);
     _libinject_dir_unlock(dirfd);
-
+    free(path);
     PRINT_MSG("= \"%s\"\n", buf);
 
     return E_SUCCESS;
 }
 
 int libinject_nvram_get_int(const char *key) {
-    char path[PATH_MAX] = MOUNT_POINT;
+    char *path = malloc(PATH_MAX);
+    if (!path) return E_FAILURE;
+    strncpy(path, MOUNT_POINT, PATH_MAX - 1);
+    path[PATH_MAX - 1] = '\0';
     FILE *f;
     char buf[32]; // Buffer to store ASCII representation of the integer
     int ret = 0;
@@ -477,7 +506,7 @@ int libinject_nvram_get_int(const char *key) {
 
     PRINT_MSG("%s\n", key);
 
-    strncat(path, key, sizeof(path) - strlen(path) - 1);
+    strncat(path, key, PATH_MAX - strlen(path) - 1);
 
     // Before taking the lock, check if the key exists, if not bail
     if (access(path, F_OK) != 0) {
@@ -488,6 +517,7 @@ int libinject_nvram_get_int(const char *key) {
 
     // Try to open the file
     if ((f = fopen(path, "rb")) == NULL) {
+        free(path);
         _libinject_dir_unlock(dirfd);
         PRINT_MSG("Unable to open key: %s!\n", path);
         return E_FAILURE;
@@ -521,14 +551,16 @@ int libinject_nvram_get_int(const char *key) {
 
     fclose(f);
     _libinject_dir_unlock(dirfd);
-
+    free(path);
     PRINT_MSG("= %d\n", ret);
-
     return ret;
 }
 
 int libinject_nvram_getall(char *buf, size_t len) {
-    char path[PATH_MAX] = MOUNT_POINT;
+    char *path = malloc(PATH_MAX);
+    if (!path) return E_FAILURE;
+    strncpy(path, MOUNT_POINT, PATH_MAX - 1);
+    path[PATH_MAX - 1] = '\0';
     struct dirent *entry;
     size_t pos = 0, ret;
     DIR *dir;
@@ -553,7 +585,7 @@ int libinject_nvram_getall(char *buf, size_t len) {
             continue;
         }
 
-        strncpy(path + strlen(MOUNT_POINT), entry->d_name, ARRAY_SIZE(path) - ARRAY_SIZE(MOUNT_POINT) - 1);
+        strncpy(path + strlen(MOUNT_POINT), entry->d_name, PATH_MAX - strlen(MOUNT_POINT) - 1);
         path[PATH_MAX - 1] = '\0';
 
         if ((ret = snprintf(buf + pos, len - pos, "%s=", entry->d_name)) != strlen(entry->d_name) + 1) {
@@ -568,33 +600,52 @@ int libinject_nvram_getall(char *buf, size_t len) {
         if ((f = fopen(path, "rb")) == NULL) {
             closedir(dir);
             _libinject_dir_unlock(dirfd);
+            free(path);
             PRINT_MSG("Unable to open key: %s!\n", path);
             return E_FAILURE;
         }
-
-        ret = fread(temp, sizeof(*temp), BUFFER_SIZE, f);
-        if (ferror(f)) {
+        // Determine file size
+        fseek(f, 0, SEEK_END);
+        long filesize = ftell(f);
+        rewind(f);
+        if (filesize < 0) filesize = 0;
+        char *temp = malloc(filesize + 1);
+        if (!temp) {
             fclose(f);
             closedir(dir);
             _libinject_dir_unlock(dirfd);
+            free(path);
+            PRINT_MSG("Unable to allocate buffer for key: %s!\n", path);
+            return E_FAILURE;
+        }
+        ret = fread(temp, 1, filesize, f);
+        if (ferror(f)) {
+            free(temp);
+            fclose(f);
+            closedir(dir);
+            _libinject_dir_unlock(dirfd);
+            free(path);
             PRINT_MSG("Unable to read key: %s!\n", path);
             return E_FAILURE;
         }
-
         memcpy(buf + pos, temp, ret);
         buf[pos + ret] = '\0';
         pos += ret + 1;
-
+        free(temp);
         fclose(f);
     }
-
+    
     closedir(dir);
     _libinject_dir_unlock(dirfd);
+    free(path);
     return E_SUCCESS;
 }
 
 int libinject_nvram_set(const char *key, const char *val) {
-    char path[PATH_MAX] = MOUNT_POINT;
+    char *path = malloc(PATH_MAX);
+    if (!path) return E_FAILURE;
+    strncpy(path, MOUNT_POINT, PATH_MAX - 1);
+    path[PATH_MAX - 1] = '\0';
     FILE *f;
     int dirfd;
     int rv;
@@ -606,7 +657,7 @@ int libinject_nvram_set(const char *key, const char *val) {
 
     PRINT_MSG("%s = \"%s\"\n", key, val);
 
-    strncat(path, key, sizeof(path) - strlen(path) - 1);
+    strncat(path, key, PATH_MAX - strlen(path) - 1);
 
     rv = igloo_hypercall2(109, (unsigned long)path, (unsigned long)val);
     while (rv == 1) {
@@ -619,6 +670,7 @@ int libinject_nvram_set(const char *key, const char *val) {
     if ((f = fopen(path, "wb")) == NULL) {
         _libinject_dir_unlock(dirfd);
         PRINT_MSG("Unable to open key: %s!\n", path);
+        free(path);
         return E_FAILURE;
     }
 
@@ -632,6 +684,7 @@ int libinject_nvram_set(const char *key, const char *val) {
 
     fclose(f);
     _libinject_dir_unlock(dirfd);
+    free(path);
     return E_SUCCESS;
 }
 
@@ -717,27 +770,36 @@ int libinject_nvram_unset(const char *key) {
 }
 
 int libinject_nvram_safe_unset(const char *key) {
+    char *temp = malloc(BUFFER_SIZE);
+    if (!temp) return E_SUCCESS;
     memset(temp, 0, BUFFER_SIZE);
     if (libinject_nvram_get_buf(key, temp, BUFFER_SIZE) == E_SUCCESS) {
       libinject_nvram_unset(key);
     }
+    free(temp);
     return E_SUCCESS;
 }
 
 int libinject_nvram_match(const char *key, const char *val) {
+    char *temp = malloc(BUFFER_SIZE);
+    if (!temp) return E_FAILURE;
     memset(temp, 0, BUFFER_SIZE);
     if (!key) {
+        free(temp);
         PRINT_MSG("%s\n", "NULL key!");
         return E_FAILURE;
     }
 
     if (libinject_nvram_get_buf(key, temp, BUFFER_SIZE) != E_SUCCESS) {
+        free(temp);
         return !val ? E_SUCCESS : E_FAILURE;
     }
 
     PRINT_MSG("%s (%s) ?= \"%s\"\n", key, temp, val);
 
-    if (strncmp(temp, val, BUFFER_SIZE)) {
+    int cmp = strncmp(temp, val, BUFFER_SIZE);
+    free(temp);
+    if (cmp) {
         PRINT_MSG("%s\n", "false");
         return E_FAILURE;
     }
@@ -831,72 +893,96 @@ int libinject_nvram_get_nvramspace(void) {
 
 char *libinject_nvram_nget(const char *fmt, ...) {
     va_list va;
-
+    char *temp = malloc(BUFFER_SIZE);
+    if (!temp) return NULL;
     va_start(va, fmt);
     vsnprintf(temp, BUFFER_SIZE, fmt, va);
     va_end(va);
-
-    return libinject_nvram_get(temp);
+    char *result = libinject_nvram_get(temp);
+    free(temp);
+    return result;
 }
 
 int libinject_nvram_nset(const char *val, const char *fmt, ...) {
     va_list va;
+    char *temp = malloc(BUFFER_SIZE);
+    if (!temp) return E_FAILURE;
     memset(temp, 0, BUFFER_SIZE);
     va_start(va, fmt);
     vsnprintf(temp, BUFFER_SIZE, fmt, va);
     va_end(va);
 
-    return libinject_nvram_set(temp, val);
+    int ret = libinject_nvram_set(temp, val);
+    free(temp);
+    return ret;
 }
 
 int libinject_nvram_nset_int(const int val, const char *fmt, ...) {
     va_list va;
+    char *temp = malloc(BUFFER_SIZE);
+    if (!temp) return E_FAILURE;
     memset(temp, 0, BUFFER_SIZE);
     va_start(va, fmt);
     vsnprintf(temp, BUFFER_SIZE, fmt, va);
     va_end(va);
 
-    return libinject_nvram_set_int(temp, val);
+    int ret = libinject_nvram_set_int(temp, val);
+    free(temp);
+    return ret;
 }
 
 int libinject_nvram_nmatch(const char *val, const char *fmt, ...) {
     va_list va;
+    char *temp = malloc(BUFFER_SIZE);
+    if (!temp) return E_FAILURE;
     memset(temp, 0, BUFFER_SIZE);
     va_start(va, fmt);
     vsnprintf(temp, BUFFER_SIZE, fmt, va);
     va_end(va);
 
-    return libinject_nvram_match(temp, val);
+    int ret = libinject_nvram_match(temp, val);
+    free(temp);
+    return ret;
 }
 
 /* Realtek */
 int libinject_apmib_get(const int key, void *buf) {
-    int res;
+    char *temp = malloc(BUFFER_SIZE);
+    if (!temp) return 0;
     memset(temp, 0, BUFFER_SIZE);
+    int res;
     snprintf(temp, BUFFER_SIZE, "%d", key);
     if ((res = libinject_nvram_get_int(temp))) {
         (*(int32_t *) buf) = res;
     }
-
+    free(temp);
     return res;
 }
 
 int libinject_apmib_set(const int key, void *buf) {
+    char *temp = malloc(BUFFER_SIZE);
+    if (!temp) return E_FAILURE;
     memset(temp, 0, BUFFER_SIZE);
     snprintf(temp, BUFFER_SIZE, "%d", key);
-    return libinject_nvram_set_int(temp, ((int32_t *) buf)[0]);
+    int ret = libinject_nvram_set_int(temp, ((int32_t *) buf)[0]);
+    free(temp);
+    return ret;
 }
 
 /* Netgear ACOS */
 
 int libinject_WAN_ith_CONFIG_GET(char *buf, const char *fmt, ...) {
     va_list va;
+    char *temp = malloc(BUFFER_SIZE);
+    if (!temp) return E_FAILURE;
     memset(temp, 0, BUFFER_SIZE);
     va_start(va, fmt);
     vsnprintf(temp, BUFFER_SIZE, fmt, va);
     va_end(va);
 
-    return libinject_nvram_get_buf(temp, buf, USER_BUFFER_SIZE);
+    int ret = libinject_nvram_get_buf(temp, buf, USER_BUFFER_SIZE);
+    free(temp);
+    return ret;
 }
 
 /* ZyXel / Edimax */
@@ -965,12 +1051,16 @@ int libinject_envram_set(const char *key, const char *val) {
 
 int libinject_envram_setf(const char* key, const char* fmt, ...) {
     va_list va;
+    char *temp = malloc(BUFFER_SIZE);
+    if (!temp) return E_FAILURE;
     memset(temp, 0, BUFFER_SIZE);
     va_start(va, fmt);
     vsnprintf(temp, BUFFER_SIZE, fmt, va);
     va_end(va);
 
-    return !libinject_nvram_set(key, temp);
+    int ret = !libinject_nvram_set(key, temp);
+    free(temp);
+    return ret;
 }
 
 int libinject_envram_unset(const char *key) {
