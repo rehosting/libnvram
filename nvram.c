@@ -29,6 +29,7 @@
 
 /* Global variables */
 static int init = 0;
+static volatile int logging_enabled = 0;
 #define FIRMAE_NVRAM 1
 
 static int _libinject_flock_asm(int fd, int op) {
@@ -239,10 +240,12 @@ int libinject_nvram_clear(void) {
             ret = E_FAILURE;
         }
         // Clear is really a bunch of unsets
-        rv = igloo_hypercall2(110, (unsigned long)path, strlen(path));
-        while (rv == 1) {
-            PAGE_IN(path);
+        if (logging_enabled) {
             rv = igloo_hypercall2(110, (unsigned long)path, strlen(path));
+            while (rv == 1) {
+                PAGE_IN(path);
+                rv = igloo_hypercall2(110, (unsigned long)path, strlen(path));
+            }
         }
     }
 
@@ -427,7 +430,9 @@ int libinject_nvram_get_buf(const char *key, char *buf, size_t sz) {
 
     // Before taking the lock, check if the key exists, if not bail
     if (access(path, F_OK) != 0) {
-        rv = igloo_hypercall2(107, (unsigned long)path, strlen(path));
+        if (logging_enabled) {
+            rv = igloo_hypercall2(107, (unsigned long)path, strlen(path));
+        }
 #ifdef FIRMAE_NVRAM
         // Key doesn't exist, set default empty value
         buf[0] = '\0';
@@ -445,10 +450,12 @@ int libinject_nvram_get_buf(const char *key, char *buf, size_t sz) {
         _libinject_dir_unlock(dirfd);
         PRINT_MSG("Unable to open key: %s! Set default value to \"\"\n", path);
 
-        rv = igloo_hypercall2(107, (unsigned long)path, strlen(path));
-        while (rv == 1) {
-            PAGE_IN(path);
+        if (logging_enabled) {
             rv = igloo_hypercall2(107, (unsigned long)path, strlen(path));
+            while (rv == 1) {
+                PAGE_IN(path);
+                rv = igloo_hypercall2(107, (unsigned long)path, strlen(path));
+            }
         }
 
 
@@ -468,10 +475,12 @@ int libinject_nvram_get_buf(const char *key, char *buf, size_t sz) {
         PRINT_MSG("\n\n[NVRAM] %d %s\n\n", (int)strlen(key), key);
 
         // success
-        rv = igloo_hypercall2(108, (unsigned long)path, strlen(path));
-        while (rv == 1) {
-            PAGE_IN(path);
+        if (logging_enabled) {
             rv = igloo_hypercall2(108, (unsigned long)path, strlen(path));
+            while (rv == 1) {
+                PAGE_IN(path);
+                rv = igloo_hypercall2(108, (unsigned long)path, strlen(path));
+            }
         }
     }
 
@@ -634,7 +643,7 @@ int libinject_nvram_getall(char *buf, size_t len) {
         free(temp);
         fclose(f);
     }
-    
+
     closedir(dir);
     _libinject_dir_unlock(dirfd);
     free(path);
@@ -659,10 +668,12 @@ int libinject_nvram_set(const char *key, const char *val) {
 
     strncat(path, key, PATH_MAX - strlen(path) - 1);
 
-    rv = igloo_hypercall2(109, (unsigned long)path, (unsigned long)val);
-    while (rv == 1) {
-        PAGE_IN(path);
+    if (logging_enabled) {
         rv = igloo_hypercall2(109, (unsigned long)path, (unsigned long)val);
+        while (rv == 1) {
+            PAGE_IN(path);
+            rv = igloo_hypercall2(109, (unsigned long)path, (unsigned long)val);
+        }
     }
 
     dirfd = _libinject_dir_lock();
@@ -751,10 +762,12 @@ int libinject_nvram_unset(const char *key) {
 
     snprintf(path, path_len, "%s%s", MOUNT_POINT, truncated_key);
 
-    rv = igloo_hypercall2(110, (unsigned long)path, strlen(path));
-    while (rv == 1) {
-        PAGE_IN(path);
+    if (logging_enabled) {
         rv = igloo_hypercall2(110, (unsigned long)path, strlen(path));
+        while (rv == 1) {
+            PAGE_IN(path);
+            rv = igloo_hypercall2(110, (unsigned long)path, strlen(path));
+        }
     }
 
     dirfd = _libinject_dir_lock();
