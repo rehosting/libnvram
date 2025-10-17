@@ -192,6 +192,10 @@ int libinject_ret_0_arg(char* a1) {
 
 
 int libinject_nvram_init(void) {
+    if (!init) {
+        // If we haven't initialized yet, check if we should be logging events
+        logging_enabled = igloo_hypercall2(111, 0, 0);
+    }
     init = 1;
     return E_SUCCESS;
 }
