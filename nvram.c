@@ -18,6 +18,9 @@
 #include <mntent.h>
 #include <fcntl.h>
 
+// This is used by libhc for send_hypercall hc function, needs to be declared before includes
+#define MAGIC_VALUE 0xb335a535
+
 #include "nvram.h"
 #include "config.h"
 #include "strings.h"
@@ -31,6 +34,8 @@
 static int init = 0;
 static volatile int logging_enabled = 0;
 #define FIRMAE_NVRAM 1
+#define CONFIG_CACHE_DIR "/igloo/config_tmpfs"
+#define CONFIG_LOCK_FILE CONFIG_CACHE_DIR ".lock"
 
 static int _libinject_flock_asm(int fd, int op) {
     // File lock with SYS_flock. We do this in assembly
@@ -1092,6 +1097,202 @@ char *libinject_nvram_bufget(int idx, const char *key) {
 
 int libinject_nvram_bufset(int idx, const char *key, const char *val) {
     return libinject_nvram_set(key, val);
+}
+
+/* Config accessor */
+static int _libinject_config_lock() {
+    int lockfd;
+
+    lockfd = open(CONFIG_LOCK_FILE, O_CREAT | O_RDWR, 0644);
+    if (lockfd < 0) {
+        PRINT_MSG("Lock file open failed, creating cache dir %s\n", CONFIG_CACHE_DIR);
+        if (mkdir(CONFIG_CACHE_DIR, 0755) == -1 && errno != EEXIST) {
+            PRINT_MSG("Failed to create config cache dir %s\n", CONFIG_CACHE_DIR);
+            return -1;
+        }
+
+        if (mount("tmpfs", CONFIG_CACHE_DIR, "tmpfs", 0, NULL) == -1) {
+            PRINT_MSG("Failed to mount tmpfs at %s\n", CONFIG_CACHE_DIR);
+        }
+
+        lockfd = open(CONFIG_LOCK_FILE, O_CREAT | O_RDWR, 0644);
+        if (lockfd < 0) {
+            PRINT_MSG("Still couldn't open lock file %s\n", CONFIG_LOCK_FILE);
+            return -1;
+        }
+    }
+
+    if (_libinject_flock_asm(lockfd, LOCK_EX) < 0) {
+        PRINT_MSG("Couldn't lock %s\n", CONFIG_LOCK_FILE);
+        close(lockfd);
+        return -1;
+    }
+
+    return lockfd;
+}
+
+static void _libinject_config_unlock(int lockfd) {
+    if (lockfd >= 0) {
+        _libinject_flock_asm(lockfd, LOCK_UN);
+        close(lockfd);
+    }
+}
+
+static int _libinject_mkdir_p(const char *path) {
+    char *tmp = strdup(path);
+    if (!tmp) return -1;
+
+    size_t len = strlen(tmp);
+    if (tmp[len - 1] == '/') {
+        tmp[len - 1] = '\0';
+    }
+
+    for (char *p = tmp + 1; *p; p++) {
+        if (*p == '/') {
+            *p = '\0';
+            if (mkdir(tmp, 0755) == -1 && errno != EEXIST) {
+                free(tmp);
+                return -1;
+            }
+            *p = '/';
+        }
+    }
+
+    if (mkdir(tmp, 0755) == -1 && errno != EEXIST) {
+        free(tmp);
+        return -1;
+    }
+
+    free(tmp);
+    return 0;
+}
+
+char *libinject_get_config(const char *config_key) {
+    if (!config_key) {
+        PRINT_MSG("%s\n", "NULL config key!");
+        return NULL;
+    }
+
+    // Build cache file path by replacing dots with slashes
+    char *cache_path = malloc(PATH_MAX);
+    if (!cache_path) return NULL;
+
+    snprintf(cache_path, PATH_MAX, "%s/", CONFIG_CACHE_DIR);
+
+    // Replace dots with slashes in config_key
+    const char *src = config_key;
+    char *dst = cache_path + strlen(cache_path);
+    size_t remaining = PATH_MAX - strlen(cache_path) - 1;
+
+    while (*src && remaining > 0) {
+        if (*src == '.') {
+            *dst++ = '/';
+        } else {
+            *dst++ = *src;
+        }
+        src++;
+        remaining--;
+    }
+    *dst = '\0';
+
+    PRINT_MSG("Config cache path: %s\n", cache_path);
+
+    // Check if cache file exists
+    if (access(cache_path, F_OK) != 0) {
+        // Need to create cache file - acquire lock
+        int lockfd = _libinject_config_lock();
+        if (lockfd < 0) {
+            free(cache_path);
+            return NULL;
+        }
+
+        // Double-check after acquiring lock
+        if (access(cache_path, F_OK) != 0) {
+            // Create directory structure
+            char *dir_path = strdup(cache_path);
+            if (dir_path) {
+                char *last_slash = strrchr(dir_path, '/');
+                if (last_slash) {
+                    *last_slash = '\0';
+                    _libinject_mkdir_p(dir_path);
+                }
+                free(dir_path);
+            }
+
+            // Get config value via direct hypercall
+            char *output = malloc(BUFFER_SIZE);
+            if (output) {
+                memset(output, 0, BUFFER_SIZE);
+
+                // Prepare hypercall arguments
+                static const char get_config_cmd[] = "get_config";
+                void **hypercall_args = calloc(3, sizeof(void *));
+                hypercall_args[0] = (void *)get_config_cmd;
+                hypercall_args[1] = (void *)config_key;
+                hypercall_args[2] = (void *)output;
+                PRINT_MSG("hypercall_args: %p via hypercall\n", hypercall_args);
+                int rv = hc(MAGIC_VALUE, hypercall_args, 3);
+
+                // Write to cache file if we got a result
+                if (strlen(output) > 0) {
+                    FILE *cache_file = fopen(cache_path, "w");
+                    if (cache_file) {
+                        fputs(output, cache_file);
+                        fclose(cache_file);
+                        PRINT_MSG("Cached config %s = %s\n", config_key, output);
+                    }
+                }
+                free(output);
+            }
+        }
+        _libinject_config_unlock(lockfd);
+    }
+
+    // Read from cache file
+    FILE *cache_file = fopen(cache_path, "r");
+    free(cache_path);
+
+    if (!cache_file) {
+        PRINT_MSG("Unable to open cache file for %s\n", config_key);
+        return NULL;
+    }
+
+    char *result = malloc(BUFFER_SIZE);
+    if (!result) {
+        fclose(cache_file);
+        return NULL;
+    }
+
+    memset(result, 0, BUFFER_SIZE);
+    if (fgets(result, BUFFER_SIZE, cache_file)) {
+        // Remove trailing newline
+        size_t len = strlen(result);
+        if (len > 0 && result[len-1] == '\n') {
+            result[len-1] = '\0';
+        }
+    }
+    fclose(cache_file);
+
+    // Check for "false" values like the shell script
+    if (!strcmp(result, "False") || !strcmp(result, "None") ||
+        !strcmp(result, "false") || !strcmp(result, "")) {
+        free(result);
+        return NULL;
+    }
+
+    PRINT_MSG("Got config %s = %s\n", config_key, result);
+    return result; //leaks memory just like other functions
+}
+
+int libinject_get_config_int(const char *config_key) {
+    char *str_val = libinject_get_config(config_key);
+    if (!str_val) {
+        return 0;
+    }
+
+    int result = atoi(str_val);
+    free(str_val);
+    return result;
 }
 
 // Hack to use static variables in shared library
