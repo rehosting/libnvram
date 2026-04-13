@@ -416,11 +416,13 @@ int libinject_nvram_get_buf(const char *key, char *buf, size_t sz) {
 
     if (!buf) {
         PRINT_MSG("NULL output buffer, key: %s!\n", key);
+        free(path);
         return E_FAILURE;
     }
 
     if (!key) {
         PRINT_MSG("NULL input key, buffer: %s!\n", buf);
+        free(path);
 #ifdef FIRMAE_NVRAM
             return E_SUCCESS;
 #else
@@ -437,6 +439,7 @@ int libinject_nvram_get_buf(const char *key, char *buf, size_t sz) {
         if (logging_enabled) {
             rv = igloo_hypercall2(107, (unsigned long)path, strlen(path));
         }
+        free(path);
 #ifdef FIRMAE_NVRAM
         // Key doesn't exist, set default empty value
         buf[0] = '\0';
@@ -461,7 +464,7 @@ int libinject_nvram_get_buf(const char *key, char *buf, size_t sz) {
                 rv = igloo_hypercall2(107, (unsigned long)path, strlen(path));
             }
         }
-
+        free(path);
 
 #ifdef FIRMAE_NVRAM
             //If key value is not found, make the default value to ""
@@ -514,6 +517,7 @@ int libinject_nvram_get_int(const char *key) {
 
     if (!key) {
         PRINT_MSG("%s\n", "NULL key!");
+        free(path);
         return E_FAILURE;
     }
 
@@ -523,6 +527,7 @@ int libinject_nvram_get_int(const char *key) {
 
     // Before taking the lock, check if the key exists, if not bail
     if (access(path, F_OK) != 0) {
+        free(path);
         return E_FAILURE;
     }
 
@@ -530,9 +535,9 @@ int libinject_nvram_get_int(const char *key) {
 
     // Try to open the file
     if ((f = fopen(path, "rb")) == NULL) {
+        PRINT_MSG("Unable to open key: %s!\n", path);
         free(path);
         _libinject_dir_unlock(dirfd);
-        PRINT_MSG("Unable to open key: %s!\n", path);
         return E_FAILURE;
     }
 
@@ -552,6 +557,7 @@ int libinject_nvram_get_int(const char *key) {
                 PRINT_MSG("Unable to read key as binary int: %s!\n", path);
                 fclose(f);
                 _libinject_dir_unlock(dirfd);
+                free(path);
                 return E_FAILURE;
             }
         }
@@ -559,6 +565,7 @@ int libinject_nvram_get_int(const char *key) {
         fclose(f);
         _libinject_dir_unlock(dirfd);
         PRINT_MSG("Unable to read key: %s!\n", path);
+        free(path);
         return E_FAILURE;
     }
 
@@ -582,6 +589,7 @@ int libinject_nvram_getall(char *buf, size_t len) {
 
     if (!buf || !len) {
         PRINT_MSG("%s\n", "NULL buffer or zero length!");
+        free(path);
         return E_FAILURE;
     }
 
@@ -590,6 +598,7 @@ int libinject_nvram_getall(char *buf, size_t len) {
     if (!(dir = opendir(MOUNT_POINT))) {
         _libinject_dir_unlock(dirfd);
         PRINT_MSG("Unable to open directory %s!\n", MOUNT_POINT);
+        free(path);
         return E_FAILURE;
     }
 
@@ -605,16 +614,17 @@ int libinject_nvram_getall(char *buf, size_t len) {
             closedir(dir);
             _libinject_dir_unlock(dirfd);
             PRINT_MSG("Unable to append key %s!\n", buf + pos);
+            free(path);
             return E_FAILURE;
         }
 
         pos += ret;
 
         if ((f = fopen(path, "rb")) == NULL) {
+            PRINT_MSG("Unable to open key: %s!\n", path);
             closedir(dir);
             _libinject_dir_unlock(dirfd);
             free(path);
-            PRINT_MSG("Unable to open key: %s!\n", path);
             return E_FAILURE;
         }
         // Determine file size
@@ -624,21 +634,21 @@ int libinject_nvram_getall(char *buf, size_t len) {
         if (filesize < 0) filesize = 0;
         char *temp = malloc(filesize + 1);
         if (!temp) {
+            PRINT_MSG("Unable to allocate buffer for key: %s!\n", path);
             fclose(f);
             closedir(dir);
             _libinject_dir_unlock(dirfd);
             free(path);
-            PRINT_MSG("Unable to allocate buffer for key: %s!\n", path);
             return E_FAILURE;
         }
         ret = fread(temp, 1, filesize, f);
         if (ferror(f)) {
+            PRINT_MSG("Unable to read key: %s!\n", path);
             free(temp);
             fclose(f);
             closedir(dir);
             _libinject_dir_unlock(dirfd);
             free(path);
-            PRINT_MSG("Unable to read key: %s!\n", path);
             return E_FAILURE;
         }
         memcpy(buf + pos, temp, ret);
@@ -665,6 +675,7 @@ int libinject_nvram_set(const char *key, const char *val) {
 
     if (!key || !val) {
         PRINT_MSG("%s\n", "NULL key or value!");
+        free(path);
         return E_FAILURE;
     }
 
@@ -693,6 +704,7 @@ int libinject_nvram_set(const char *key, const char *val) {
         fclose(f);
         _libinject_dir_unlock(dirfd);
         PRINT_MSG("Unable to write value: %s to key: %s!\n", val, path);
+        free(path);
         return E_FAILURE;
     }
     PRINT_MSG("Wrote value: %s to key: %s!\n", val, path);
@@ -711,6 +723,7 @@ int libinject_nvram_set_int(const char *key, const int val) {
 
     if (!key) {
         PRINT_MSG("%s\n", "NULL key!");
+        free(path);
         return E_FAILURE;
     }
     // Truncate key if too long
@@ -754,6 +767,7 @@ int libinject_nvram_unset(const char *key) {
 
     if (!key) {
         PRINT_MSG("%s\n", "NULL key!");
+        free(path);
         return E_FAILURE;
     }
     // Truncate key if too long
