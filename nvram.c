@@ -439,6 +439,7 @@ int libinject_nvram_get_buf(const char *key, char *buf, size_t sz) {
         if (logging_enabled) {
             rv = igloo_hypercall2(107, (unsigned long)path, strlen(path));
         }
+        PAGE_IN(path);
         free(path);
 #ifdef FIRMAE_NVRAM
         // Key doesn't exist, set default empty value
