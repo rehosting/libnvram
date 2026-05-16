@@ -20,6 +20,7 @@
 
 #include "nvram.h"
 #include "config.h"
+#include "portalcall.h"
 #include "strings.h"
 
 // https://lkml.org/lkml/2007/3/9/10
@@ -194,7 +195,7 @@ int libinject_ret_0_arg(char* a1) {
 int libinject_nvram_init(void) {
     if (!init) {
         // If we haven't initialized yet, check if we should be logging events
-        logging_enabled = igloo_hypercall2(111, 0, 0);
+        logging_enabled = portal_call2(111, 0, 0);
     }
     init = 1;
     return E_SUCCESS;
@@ -245,10 +246,10 @@ int libinject_nvram_clear(void) {
         }
         // Clear is really a bunch of unsets
         if (logging_enabled) {
-            rv = igloo_hypercall2(110, (unsigned long)path, strlen(path));
+            rv = portal_call2(110, (unsigned long)path, strlen(path));
             while (rv == 1) {
                 PAGE_IN(path);
-                rv = igloo_hypercall2(110, (unsigned long)path, strlen(path));
+                rv = portal_call2(110, (unsigned long)path, strlen(path));
             }
         }
     }
@@ -437,7 +438,7 @@ int libinject_nvram_get_buf(const char *key, char *buf, size_t sz) {
     // Before taking the lock, check if the key exists, if not bail
     if (access(path, F_OK) != 0) {
         if (logging_enabled) {
-            rv = igloo_hypercall2(107, (unsigned long)path, strlen(path));
+            rv = portal_call2(107, (unsigned long)path, strlen(path));
         }
         free(path);
 #ifdef FIRMAE_NVRAM
@@ -458,10 +459,10 @@ int libinject_nvram_get_buf(const char *key, char *buf, size_t sz) {
         PRINT_MSG("Unable to open key: %s! Set default value to \"\"\n", path);
 
         if (logging_enabled) {
-            rv = igloo_hypercall2(107, (unsigned long)path, strlen(path));
+            rv = portal_call2(107, (unsigned long)path, strlen(path));
             while (rv == 1) {
                 PAGE_IN(path);
-                rv = igloo_hypercall2(107, (unsigned long)path, strlen(path));
+                rv = portal_call2(107, (unsigned long)path, strlen(path));
             }
         }
         free(path);
@@ -483,10 +484,10 @@ int libinject_nvram_get_buf(const char *key, char *buf, size_t sz) {
 
         // success
         if (logging_enabled) {
-            rv = igloo_hypercall2(108, (unsigned long)path, strlen(path));
+            rv = portal_call2(108, (unsigned long)path, strlen(path));
             while (rv == 1) {
                 PAGE_IN(path);
-                rv = igloo_hypercall2(108, (unsigned long)path, strlen(path));
+                rv = portal_call2(108, (unsigned long)path, strlen(path));
             }
         }
     }
@@ -684,10 +685,10 @@ int libinject_nvram_set(const char *key, const char *val) {
     strncat(path, key, PATH_MAX - strlen(path) - 1);
 
     if (logging_enabled) {
-        rv = igloo_hypercall2(109, (unsigned long)path, (unsigned long)val);
+        rv = portal_call2(109, (unsigned long)path, (unsigned long)val);
         while (rv == 1) {
             PAGE_IN(path);
-            rv = igloo_hypercall2(109, (unsigned long)path, (unsigned long)val);
+            rv = portal_call2(109, (unsigned long)path, (unsigned long)val);
         }
     }
 
@@ -781,10 +782,10 @@ int libinject_nvram_unset(const char *key) {
     snprintf(path, path_len, "%s%s", MOUNT_POINT, truncated_key);
 
     if (logging_enabled) {
-        rv = igloo_hypercall2(110, (unsigned long)path, strlen(path));
+        rv = portal_call2(110, (unsigned long)path, strlen(path));
         while (rv == 1) {
             PAGE_IN(path);
-            rv = igloo_hypercall2(110, (unsigned long)path, strlen(path));
+            rv = portal_call2(110, (unsigned long)path, strlen(path));
         }
     }
 

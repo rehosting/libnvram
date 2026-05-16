@@ -21,10 +21,10 @@ void _libinject_log_match(match m) {
             break;
     }
 
-    int rv = igloo_hypercall2(cmd, (unsigned long)m.value, _libinject_minimal_strlen(m.value));
+    int rv = portal_call2(cmd, (unsigned long)m.value, _libinject_minimal_strlen(m.value));
     while (rv == 1) {
         PAGE_IN(m.value);
-        rv = igloo_hypercall2(cmd, (unsigned long)m.value, _libinject_minimal_strlen(m.value));
+        rv = portal_call2(cmd, (unsigned long)m.value, _libinject_minimal_strlen(m.value));
     }
 }
 
@@ -109,14 +109,14 @@ char *libinject_strstr(const char *haystack, const char *needle) {
 
     // It's not actually a match - strstr is a bit more
     // involved so we just pass the args out every time
-    int rv = igloo_hypercall2(104, (unsigned long)haystack, (unsigned long)needle);
+    int rv = portal_call2(104, (unsigned long)haystack, (unsigned long)needle);
 
     // Hypercall returns -1 on read fail. If no hypercall is available we'd get a different reval
     // so we wouldn't infinite loop. Hopefully.
     while (rv == 1) {
         PAGE_IN(haystack);
         PAGE_IN(needle);
-        rv = igloo_hypercall2(104, (unsigned long)haystack, (unsigned long)needle);
+        rv = portal_call2(104, (unsigned long)haystack, (unsigned long)needle);
     }
 
     for (; *haystack; ++haystack) {
