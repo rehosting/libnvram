@@ -30,6 +30,9 @@
 
 /* Global variables */
 static int init = 0;
+/* Bitmask of which nvram ops to report to the host (0 = none). */
+#define NVRAM_LOG_GET 1   /* get hit/miss (107/108) */
+#define NVRAM_LOG_SET 2   /* set/clear    (109/110) */
 static volatile int logging_enabled = 0;
 #define FIRMAE_NVRAM 1
 
@@ -245,7 +248,7 @@ int libinject_nvram_clear(void) {
             ret = E_FAILURE;
         }
         // Clear is really a bunch of unsets
-        if (logging_enabled) {
+        if (logging_enabled & NVRAM_LOG_SET) {
             rv = portal_call2(110, (unsigned long)path, strlen(path));
             while (rv == 1) {
                 PAGE_IN(path);
@@ -437,7 +440,7 @@ int libinject_nvram_get_buf(const char *key, char *buf, size_t sz) {
 
     // Before taking the lock, check if the key exists, if not bail
     if (access(path, F_OK) != 0) {
-        if (logging_enabled) {
+        if (logging_enabled & NVRAM_LOG_GET) {
             rv = portal_call2(107, (unsigned long)path, strlen(path));
         }
         free(path);
@@ -458,7 +461,7 @@ int libinject_nvram_get_buf(const char *key, char *buf, size_t sz) {
         _libinject_dir_unlock(dirfd);
         PRINT_MSG("Unable to open key: %s! Set default value to \"\"\n", path);
 
-        if (logging_enabled) {
+        if (logging_enabled & NVRAM_LOG_GET) {
             rv = portal_call2(107, (unsigned long)path, strlen(path));
             while (rv == 1) {
                 PAGE_IN(path);
@@ -483,7 +486,7 @@ int libinject_nvram_get_buf(const char *key, char *buf, size_t sz) {
         PRINT_MSG("\n\n[NVRAM] %d %s\n\n", (int)strlen(key), key);
 
         // success
-        if (logging_enabled) {
+        if (logging_enabled & NVRAM_LOG_GET) {
             rv = portal_call2(108, (unsigned long)path, strlen(path));
             while (rv == 1) {
                 PAGE_IN(path);
@@ -684,7 +687,7 @@ int libinject_nvram_set(const char *key, const char *val) {
 
     strncat(path, key, PATH_MAX - strlen(path) - 1);
 
-    if (logging_enabled) {
+    if (logging_enabled & NVRAM_LOG_SET) {
         rv = portal_call2(109, (unsigned long)path, (unsigned long)val);
         while (rv == 1) {
             PAGE_IN(path);
@@ -781,7 +784,7 @@ int libinject_nvram_unset(const char *key) {
 
     snprintf(path, path_len, "%s%s", MOUNT_POINT, truncated_key);
 
-    if (logging_enabled) {
+    if (logging_enabled & NVRAM_LOG_SET) {
         rv = portal_call2(110, (unsigned long)path, strlen(path));
         while (rv == 1) {
             PAGE_IN(path);
