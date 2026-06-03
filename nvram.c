@@ -440,6 +440,9 @@ int libinject_nvram_get_buf(const char *key, char *buf, size_t sz) {
 
     // Before taking the lock, check if the key exists, if not bail
     if (access(path, F_OK) != 0) {
+        if (!init) {
+            libinject_nvram_init();
+        }
         if (logging_enabled & NVRAM_LOG_GET) {
             rv = portal_call2(107, (unsigned long)path, strlen(path));
         }
