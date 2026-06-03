@@ -687,6 +687,10 @@ int libinject_nvram_set(const char *key, const char *val) {
 
     strncat(path, key, PATH_MAX - strlen(path) - 1);
 
+    if (!init) {
+        libinject_nvram_init();
+    }
+
     if (logging_enabled & NVRAM_LOG_SET) {
         rv = portal_call2(109, (unsigned long)path, (unsigned long)val);
         while (rv == 1) {
@@ -783,6 +787,10 @@ int libinject_nvram_unset(const char *key) {
     PRINT_MSG("%s\n", truncated_key);
 
     snprintf(path, path_len, "%s%s", MOUNT_POINT, truncated_key);
+
+    if (!init) {
+        libinject_nvram_init();
+    }
 
     if (logging_enabled & NVRAM_LOG_SET) {
         rv = portal_call2(110, (unsigned long)path, strlen(path));
