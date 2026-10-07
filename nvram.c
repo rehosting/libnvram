@@ -25,6 +25,7 @@
 
 #include "nvram.h"
 #include "config.h"
+#include "portalcall.h"
 #include "strings.h"
 
 // https://lkml.org/lkml/2007/3/9/10
@@ -110,6 +111,9 @@ typedef struct {
 /* Global variables */
 static int init = 0;
 static int init_failed = 0;
+/* Bitmask of which nvram ops to report to the host (0 = none). */
+#define NVRAM_LOG_GET 1   /* get hit/miss (107/108) */
+#define NVRAM_LOG_SET 2   /* set/clear    (109/110) */
 static volatile int logging_enabled = 0;
 static int shm_fd = -1;
 static nvram_shm_t *shm_base = MAP_FAILED;
@@ -595,6 +599,31 @@ int libnvram_strncmp (const char *s1, const char *s2, size_t n)
 }
 
 
+/*
+ * lseek/ftruncate as raw syscalls with long-sized offsets. lib_inject is built
+ * against musl headers (64-bit off_t on every arch) but calls the firmware's
+ * libc at run time, which on 32-bit targets often has a 32-bit off_t (uClibc),
+ * so libc lseek()/ftruncate() get their arguments in the wrong registers. A
+ * 64-bit length passed through syscall(SYS_ftruncate64, ...) is no better: ARM
+ * EABI wants it in an even/odd register pair. Every offset used here is small,
+ * so the long-sized SYS_lseek/SYS_ftruncate are enough.
+ */
+static long _libinject_lseek(int fd, long off, int whence) {
+#if defined(SYS_lseek)
+    return syscall(SYS_lseek, fd, off, whence);
+#else
+    return (long)lseek(fd, (off_t)off, whence);
+#endif
+}
+
+static int _libinject_ftruncate(int fd, long len) {
+#if defined(SYS_ftruncate)
+    return (int)syscall(SYS_ftruncate, fd, len);
+#else
+    return ftruncate(fd, (off_t)len);
+#endif
+}
+
 static int _libinject_ready(void) {
     if (init_failed) return 0;
     if (!init) return 0;
@@ -625,7 +654,7 @@ int libinject_nvram_init(void) {
     if (init) return E_SUCCESS;
 
     nvram_log("INIT", "START", NULL);
-    logging_enabled = igloo_hypercall2(111, 0, 0);
+    logging_enabled = portal_call2(111, 0, 0);
 
 #ifdef SYS_mkdirat
     if (SYS_mkdir == SYS_mkdirat) (void)syscall(SYS_mkdir, AT_FDCWD, MOUNT_POINT, 0777);
@@ -645,14 +674,10 @@ int libinject_nvram_init(void) {
         return E_FAILURE;
     }
 
-    off_t current_size = lseek(shm_fd, 0, SEEK_END);
-    if (current_size != (off_t)sizeof(nvram_shm_t)) {
+    long current_size = _libinject_lseek(shm_fd, 0, SEEK_END);
+    if (current_size != (long)sizeof(nvram_shm_t)) {
         nvram_log("INIT", "TRUNCATE", "Resizing SHM");
-#if defined(SYS_ftruncate64)
-        if (syscall(SYS_ftruncate64, shm_fd, (long long)sizeof(nvram_shm_t)) != 0) {
-#else
-        if (syscall(SYS_ftruncate, shm_fd, (long)sizeof(nvram_shm_t)) != 0) {
-#endif
+        if (_libinject_ftruncate(shm_fd, (long)sizeof(nvram_shm_t)) != 0) {
             init_failed = 1;
             close(shm_fd);
             return E_FAILURE;
@@ -697,7 +722,7 @@ int libinject_nvram_init(void) {
             nvram_log("SEED_GETDENTS", "initial nread", nread_str);
             if (nread < 0) {
                 use_64 = 0;
-                lseek(dir_fd, 0, SEEK_SET);
+                _libinject_lseek(dir_fd, 0, SEEK_SET);
             }
 #else
             use_64 = 0;
@@ -1088,8 +1113,8 @@ int libinject_nvram_get_buf(const char *key, char *buf, size_t sz) {
 
     if (!found) {
         nvram_log("GET_MISS", key, NULL);
-        if (logging_enabled) {
-            rv = igloo_hypercall2(107, (unsigned long)fake_path, strlen(fake_path));
+        if (logging_enabled & NVRAM_LOG_GET) {
+            rv = portal_call2(107, (unsigned long)fake_path, strlen(fake_path));
             (void)rv;
         }
 #ifdef FIRMAE_NVRAM
@@ -1110,11 +1135,11 @@ int libinject_nvram_get_buf(const char *key, char *buf, size_t sz) {
         }
     }
 
-    if (logging_enabled) {
-        rv = igloo_hypercall2(108, (unsigned long)fake_path, strlen(fake_path));
+    if (logging_enabled & NVRAM_LOG_GET) {
+        rv = portal_call2(108, (unsigned long)fake_path, strlen(fake_path));
         while (rv == 1) {
             PAGE_IN(fake_path);
-            rv = igloo_hypercall2(108, (unsigned long)fake_path, strlen(fake_path));
+            rv = portal_call2(108, (unsigned long)fake_path, strlen(fake_path));
         }
     }
 
@@ -1261,7 +1286,13 @@ int libinject_nvram_set(const char *key, const char *val) {
     int use_file = (vlen >= INLINE_VAL_LEN);
     char path[PATH_MAX]; snprintf(path, sizeof(path), "%s%s", MOUNT_POINT, skey);
 
-    if (logging_enabled) igloo_hypercall2(109, (unsigned long)path, (unsigned long)val);
+    if (logging_enabled & NVRAM_LOG_SET) {
+        int rv = portal_call2(109, (unsigned long)path, (unsigned long)val);
+        while (rv == 1) {
+            PAGE_IN(path);
+            rv = portal_call2(109, (unsigned long)path, (unsigned long)val);
+        }
+    }
     if (use_file) {
         if (_libinject_write_file(path, val, vlen) < 0) {
             return E_FAILURE;
@@ -1369,11 +1400,11 @@ int libinject_nvram_unset(const char *key) {
     char skey[MAX_KEY_LEN]; strncpy(skey, key, MAX_KEY_LEN-1); skey[MAX_KEY_LEN-1] = '\0';
     char path[PATH_MAX]; snprintf(path, sizeof(path), "%s%s", MOUNT_POINT, skey);
 
-    if (logging_enabled) {
-        int rv = igloo_hypercall2(110, (unsigned long)path, strlen(path));
+    if (logging_enabled & NVRAM_LOG_SET) {
+        int rv = portal_call2(110, (unsigned long)path, strlen(path));
         while (rv == 1) {
             PAGE_IN(path);
-            rv = igloo_hypercall2(110, (unsigned long)path, strlen(path));
+            rv = portal_call2(110, (unsigned long)path, strlen(path));
         }
     }
 
@@ -1459,8 +1490,8 @@ int libinject_parse_nvram_from_file(const char *file) {
     if (fd < 0) return E_FAILURE;
 
     // Use lseek to determine file length without stat()
-    off_t fileLen = lseek(fd, 0, SEEK_END);
-    lseek(fd, 0, SEEK_SET);
+    long fileLen = _libinject_lseek(fd, 0, SEEK_END);
+    _libinject_lseek(fd, 0, SEEK_SET);
 
     if (fileLen <= 0) {
         close(fd);
