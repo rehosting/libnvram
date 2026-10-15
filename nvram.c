@@ -727,47 +727,19 @@ int libinject_nvram_set(const char *key, const char *val) {
 }
 
 int libinject_nvram_set_int(const char *key, const int val) {
-    size_t path_len = strlen(MOUNT_POINT) + strlen(key) + 1;
-    char *path = malloc(path_len);
-    FILE *f;
-    int dirfd;
+    // Store ints as their decimal string, like vendor libnvram does
+    // (snprintf + nvram_set). nvram_get/get_buf/match/getall return the
+    // stored bytes verbatim, so a raw binary int reads back as garbage
+    // through every string accessor; nvram_get_int parses the text.
+    char buf[16];
 
     if (!key) {
         PRINT_MSG("%s\n", "NULL key!");
-        free(path);
-        return E_FAILURE;
-    }
-    // Truncate key if too long
-    size_t max_key_len = PATH_MAX - strlen(MOUNT_POINT) - 1;
-    char truncated_key[PATH_MAX];
-    strncpy(truncated_key, key, max_key_len);
-    truncated_key[max_key_len] = '\0';
-
-    PRINT_MSG("%s = %d\n", truncated_key, val);
-
-    snprintf(path, path_len, "%s%s", MOUNT_POINT, truncated_key);
-
-    dirfd = _libinject_dir_lock();
-
-    if ((f = fopen(path, "wb")) == NULL) {
-        _libinject_dir_unlock(dirfd);
-        PRINT_MSG("Unable to open key: %s!\n", path);
-        free(path);
         return E_FAILURE;
     }
 
-    if (fwrite(&val, sizeof(val), 1, f) != 1) {
-        fclose(f);
-        _libinject_dir_unlock(dirfd);
-        PRINT_MSG("Unable to write value: %d to key: %s!\n", val, path);
-        free(path);
-        return E_FAILURE;
-    }
-
-    fclose(f);
-    _libinject_dir_unlock(dirfd);
-    free(path);
-    return E_SUCCESS;
+    snprintf(buf, sizeof(buf), "%d", val);
+    return libinject_nvram_set(key, buf);
 }
 
 int libinject_nvram_unset(const char *key) {
